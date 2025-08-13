@@ -14,6 +14,9 @@ export const SparkColors = {
   white: '#ffffff', // pure white
   lightGray: '#dcdcdc', // light gray for descriptions
   darkGray: '#9BA1A6', // dark gray for secondary text
+  green: '#4CAF50', // success green
+  orange: '#FF9800', // warning orange
+  red: '#F44336', // error red
 };
 
 export const Colors = {

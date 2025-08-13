@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StarkNetWalletData } from './StarkNetWalletService';
 
 export interface UserData {
   id: string;
@@ -12,14 +13,8 @@ export interface UserData {
   lastLoginAt: string;
 }
 
-export interface WalletData {
-  address: string;
-  privateKey: string;
-  publicKey: string;
-  deploymentTxHash?: string;
-  isDeployed: boolean;
-  balance?: string;
-}
+// Using StarkNetWalletData from StarkNetWalletService instead of local WalletData
+export type WalletData = StarkNetWalletData;
 
 class StorageService {
   private static instance: StorageService;
