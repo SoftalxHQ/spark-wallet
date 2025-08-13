@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 
 function SplashScreen() {
   return (
@@ -19,7 +20,7 @@ function SplashScreen() {
       <View style={[styles.decorCircle, { bottom: 120, left: -70, width: 220, height: 220, opacity: 0.18 }]} />
       
       <View style={styles.logoCircle}>
-        <Image source={require('../assets/images/splash-icon.png')} style={styles.logoImage} />
+        <Image source={require('../assets/images/logo.png')} style={styles.logoImage} />
       </View>
       <Text style={styles.splashTitle}>Spark Wallet</Text>
       <Text style={styles.splashTagline}>Crypto & Everyday Payments</Text>
@@ -37,7 +38,7 @@ type OnboardingPage = {
   title: string;
   subtitle: string;
   description: string;
-  icon: any;
+  iconName: 'creditcard.fill' | 'person.circle.fill' | 'bolt.circle.fill' | 'house.fill' | 'paperplane.fill' | 'shield.fill' | 'bolt.fill' | 'lightbulb.fill';
 };
 
 function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
@@ -46,19 +47,25 @@ function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       title: 'Welcome to Spark',
       subtitle: 'Your Digital Wallet',
       description: 'Experience the future of digital payments with secure, fast, and reliable transactions.',
-      icon: require('../assets/images/icon.png'),
+      iconName: 'creditcard.fill',
     },
     {
-      title: 'Manage Your Crypto',
-      subtitle: 'ETH, STRK, USDC',
-      description: 'View balances in crypto and fiat, manage tokens, and track your history.',
-      icon: require('../assets/images/icon.png'),
+      title: 'Secure & Protected',
+      subtitle: 'Bank-Level Security',
+      description: 'Your funds are protected with advanced encryption and multi-layer security protocols.',
+      iconName: 'shield.fill',
+    },
+    {
+      title: 'Lightning Fast',
+      subtitle: 'Instant Transactions',
+      description: 'Send and receive payments instantly with our optimized blockchain technology.',
+      iconName: 'bolt.fill',
     },
     {
       title: 'Pay Utilities Easily',
       subtitle: 'Airtime, Data, Bills',
       description: 'Pay electricity, airtime, data, and cable directly from your wallet.',
-      icon: require('../assets/images/icon.png'),
+      iconName: 'lightbulb.fill',
     },
   ];
 
@@ -118,7 +125,7 @@ function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            <Image source={page.icon} style={styles.heroIcon} />
+            <IconSymbol name={page.iconName} size={64} color={SparkColors.black} />
           </LinearGradient>
         </View>
 
@@ -170,7 +177,7 @@ function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      <Image source={require('../assets/images/icon.png')} style={styles.onboardingLogo} />
+      <Image source={require('../assets/images/logo.png')} style={styles.onboardingLogo} />
       <Text style={styles.title}>Welcome to Spark Wallet</Text>
       <Text style={styles.subtitle}>A next-generation StarkNet wallet for crypto and everyday payments.</Text>
       <TouchableOpacity style={styles.primaryButton} onPress={onSignUp}>
@@ -213,7 +220,7 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      <Image source={require('../assets/images/icon.png')} style={styles.onboardingLogoSmall} />
+      <Image source={require('../assets/images/logo.png')} style={styles.onboardingLogoSmall} />
       <Text style={styles.title}>Create Account</Text>
       <TextInput
         style={styles.input}
@@ -285,7 +292,7 @@ function LoginScreen({ onBack, onLogin }: BackOnlyProps & { onLogin: () => void 
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      <Image source={require('../assets/images/icon.png')} style={styles.onboardingLogoSmall} />
+      <Image source={require('../assets/images/logo.png')} style={styles.onboardingLogoSmall} />
       <Text style={styles.title}>Welcome Back</Text>
       <Text style={styles.subtitle}>Sign in to your Spark Wallet</Text>
       
@@ -440,19 +447,21 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: SparkColors.gold,
+    backgroundColor: SparkColors.darkBrown,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: SparkColors.tan,
+    shadowColor: SparkColors.gold,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 8,
     marginBottom: 16,
+    borderWidth: 2,
+    borderColor: SparkColors.gold,
   },
   logoImage: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     resizeMode: 'contain',
   },
   splashTitle: {
@@ -627,14 +636,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   onboardingLogo: {
-    width: 72,
-    height: 72,
+    width: 120,
+    height: 120,
     marginBottom: 24,
     resizeMode: 'contain',
   },
   onboardingLogoSmall: {
-    width: 48,
-    height: 48,
+    width: 120,
+    height: 120,
     marginBottom: 16,
     resizeMode: 'contain',
   },
