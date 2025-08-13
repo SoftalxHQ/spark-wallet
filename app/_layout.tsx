@@ -3,9 +3,15 @@ import { useFonts } from 'expo-font';
 import { SparkColors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { useEffect, useState, useRef } from 'react';
-import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View, Animated } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Text, View, Image, TouchableOpacity, TextInput, Alert, StyleSheet } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+// import SimpleGoogleSignInService from '../services/SimpleGoogleSignInService';
+import MockGoogleSignInService from '../services/MockGoogleSignInService';
+import StorageService from '../services/StorageService';
+import StarkNetWalletService from '../services/StarkNetWalletService';
+
+
 
 function SplashScreen() {
   // Animation values
@@ -54,7 +60,7 @@ function SplashScreen() {
         useNativeDriver: true,
       })
     ).start();
-  }, []);
+  }, [fadeAnim, scaleAnim, pulseAnim, circleRotateAnim]);
 
   // Animation interpolations
   const circleRotation = circleRotateAnim.interpolate({
@@ -266,6 +272,67 @@ type BackOnlyProps = {
 };
 
 function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const result = await MockGoogleSignInService.signIn();
+      if (result.success) {
+        // For now, assume no backup exists since we're using simplified service
+        const hasBackup = false;
+        if (hasBackup) {
+          Alert.alert(
+            'Wallet Found',
+            'We found an existing wallet backup in your Google Drive. Would you like to restore it?',
+            [
+              { text: 'Create New', onPress: () => onSignUp() },
+              { text: 'Restore', onPress: () => handleWalletRestore() }
+            ]
+          );
+        } else {
+          // No backup found, save user data and create StarkNet wallet
+          if (result.user) {
+            const userData = {
+              id: result.user.id,
+              email: result.user.email,
+              name: result.user.name,
+              hasCompletedOnboarding: true,
+              authMethod: 'google' as const,
+              createdAt: new Date().toISOString(),
+              lastLoginAt: new Date().toISOString()
+            };
+            await StorageService.saveUserData(userData);
+            await StorageService.setOnboardingCompleted();
+            
+            // Create StarkNet smart contract wallet
+            try {
+              const walletData = await StarkNetWalletService.createSmartWallet();
+              await StorageService.saveWalletData(walletData);
+              console.log('StarkNet wallet created and saved:', walletData.address);
+            } catch (walletError) {
+              console.error('Error creating StarkNet wallet:', walletError);
+              // Continue with onboarding even if wallet creation fails
+            }
+          }
+          onSignUp();
+        }
+      } else {
+        Alert.alert('Sign In Failed', result.error || 'Unknown error occurred');
+      }
+    } catch (error) {
+      console.error('Google Sign-In error:', error);
+      Alert.alert('Error', 'Failed to sign in with Google');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleWalletRestore = () => {
+    // TODO: Navigate to wallet restore screen
+    Alert.alert('Restore Wallet', 'Wallet restore functionality will be implemented in the next phase.');
+  };
+
   return (
     <LinearGradient
       colors={[SparkColors.black, SparkColors.darkBrown]}
@@ -276,11 +343,36 @@ function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
       <Image source={require('../assets/images/logo.png')} style={styles.onboardingLogo} />
       <Text style={styles.title}>Welcome to Spark Wallet</Text>
       <Text style={styles.subtitle}>A next-generation StarkNet wallet for crypto and everyday payments.</Text>
+      
+      {/* Google Sign-In Button */}
+      <TouchableOpacity 
+        style={[styles.googleButton, isGoogleLoading && styles.disabledButton]} 
+        onPress={handleGoogleSignIn}
+        disabled={isGoogleLoading}
+      >
+        <View style={styles.googleButtonContent}>
+          <Image 
+            source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} 
+            style={styles.googleIcon} 
+          />
+          <Text style={styles.googleButtonText}>
+            {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      
+      {/* Divider */}
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>or</Text>
+        <View style={styles.dividerLine} />
+      </View>
+      
       <TouchableOpacity style={styles.primaryButton} onPress={onSignUp}>
-        <Text style={styles.primaryButtonText}>Sign Up</Text>
+        <Text style={styles.primaryButtonText}>Sign Up with Email</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.secondaryButton} onPress={onLogin}>
-        <Text style={styles.secondaryButtonText}>Log In</Text>
+        <Text style={styles.secondaryButtonText}>Log In with Email</Text>
       </TouchableOpacity>
     </LinearGradient>
   );
@@ -290,6 +382,7 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
   const handleSignUp = () => {
     if (!email || !password || !confirmPassword) {
@@ -308,6 +401,48 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
     alert('Account created successfully!');
     onBack();
   };
+
+  const handleGoogleSignUp = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const result = await MockGoogleSignInService.signIn();
+      if (result.success) {
+        // For now, assume no backup exists since we're using simplified service
+        const hasBackup = false;
+        if (hasBackup) {
+          Alert.alert(
+            'Wallet Found',
+            'We found an existing wallet backup in your Google Drive. Would you like to restore it or create a new wallet?',
+            [
+              { text: 'Create New', onPress: () => handleCreateNewWallet() },
+              { text: 'Restore', onPress: () => handleWalletRestore() }
+            ]
+          );
+        } else {
+          // No backup found, proceed with new wallet creation
+          handleCreateNewWallet();
+        }
+      } else {
+        Alert.alert('Sign Up Failed', result.error || 'Unknown error occurred');
+      }
+    } catch (error) {
+      console.error('Google Sign-Up error:', error);
+      Alert.alert('Error', 'Failed to sign up with Google');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleCreateNewWallet = () => {
+    // TODO: Implement wallet creation with automatic Google Drive backup
+    Alert.alert('Success', 'Google account connected! Wallet creation with automatic backup will be implemented in Phase 1.');
+    onBack();
+  };
+
+  const handleWalletRestore = () => {
+    // TODO: Navigate to wallet restore screen
+    Alert.alert('Restore Wallet', 'Wallet restore functionality will be implemented in the next phase.');
+  };
   
   return (
     <LinearGradient
@@ -318,6 +453,31 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
     >
       <Image source={require('../assets/images/logo.png')} style={styles.onboardingLogoSmall} />
       <Text style={styles.title}>Create Account</Text>
+      
+      {/* Google Sign-Up Button */}
+      <TouchableOpacity 
+        style={[styles.googleButton, isGoogleLoading && styles.disabledButton]} 
+        onPress={handleGoogleSignUp}
+        disabled={isGoogleLoading}
+      >
+        <View style={styles.googleButtonContent}>
+          <Image 
+            source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} 
+            style={styles.googleIcon} 
+          />
+          <Text style={styles.googleButtonText}>
+            {isGoogleLoading ? 'Signing up...' : 'Sign Up with Google'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      
+      {/* Divider */}
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>or</Text>
+        <View style={styles.dividerLine} />
+      </View>
+      
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -344,7 +504,7 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
         secureTextEntry
       />
       <TouchableOpacity style={styles.primaryButton} onPress={handleSignUp}>
-        <Text style={styles.primaryButtonText}>Sign Up</Text>
+        <Text style={styles.primaryButtonText}>Sign Up with Email</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.secondaryButton} onPress={onBack}>
         <Text style={styles.secondaryButtonText}>Back</Text>
@@ -357,6 +517,7 @@ function LoginScreen({ onBack, onLogin }: BackOnlyProps & { onLogin: () => void 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
   const handleLogin = async () => {
     if (!email || !password) {
@@ -380,6 +541,59 @@ function LoginScreen({ onBack, onLogin }: BackOnlyProps & { onLogin: () => void 
       }
     }, 1500);
   };
+
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const result = await MockGoogleSignInService.signIn();
+      if (result.success) {
+        // For now, assume no backup exists since we're using simplified service
+        const hasBackup = false;
+        if (hasBackup) {
+          // User has backup, proceed to restore wallet
+          Alert.alert(
+            'Wallet Found',
+            'We found your wallet backup. Please enter your password to restore it.',
+            [{ text: 'OK', onPress: () => handleWalletRestore() }]
+          );
+        } else {
+          // No backup found, user needs to create wallet or import
+          Alert.alert(
+            'No Wallet Found',
+            'No wallet backup found in your Google Drive. Would you like to create a new wallet or import an existing one?',
+            [
+              { text: 'Create New', onPress: () => handleCreateNewWallet() },
+              { text: 'Import', onPress: () => handleImportWallet() }
+            ]
+          );
+        }
+      } else {
+        Alert.alert('Login Failed', result.error || 'Unknown error occurred');
+      }
+    } catch (error) {
+      console.error('Google Login error:', error);
+      Alert.alert('Error', 'Failed to login with Google');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleWalletRestore = () => {
+    // TODO: Navigate to wallet restore screen
+    Alert.alert('Restore Wallet', 'Wallet restore functionality will be implemented in the next phase.');
+    onLogin(); // For now, proceed to main app
+  };
+
+  const handleCreateNewWallet = () => {
+    // TODO: Navigate to wallet creation
+    Alert.alert('Create Wallet', 'New wallet creation will be implemented in Phase 1.');
+    onLogin(); // For now, proceed to main app
+  };
+
+  const handleImportWallet = () => {
+    // TODO: Navigate to wallet import screen
+    Alert.alert('Import Wallet', 'Wallet import functionality will be implemented in Phase 1.');
+  };
   
   return (
     <LinearGradient
@@ -392,6 +606,30 @@ function LoginScreen({ onBack, onLogin }: BackOnlyProps & { onLogin: () => void 
       <Text style={styles.title}>Welcome Back</Text>
       <Text style={styles.subtitle}>Sign in to your Spark Wallet</Text>
       
+      {/* Google Login Button */}
+      <TouchableOpacity 
+        style={[styles.googleButton, isGoogleLoading && styles.disabledButton]} 
+        onPress={handleGoogleLogin}
+        disabled={isGoogleLoading || isLoading}
+      >
+        <View style={styles.googleButtonContent}>
+          <Image 
+            source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} 
+            style={styles.googleIcon} 
+          />
+          <Text style={styles.googleButtonText}>
+            {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      
+      {/* Divider */}
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>or</Text>
+        <View style={styles.dividerLine} />
+      </View>
+      
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -400,7 +638,7 @@ function LoginScreen({ onBack, onLogin }: BackOnlyProps & { onLogin: () => void 
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
-        editable={!isLoading}
+        editable={!isLoading && !isGoogleLoading}
       />
       <TextInput
         style={styles.input}
@@ -409,25 +647,23 @@ function LoginScreen({ onBack, onLogin }: BackOnlyProps & { onLogin: () => void 
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        editable={!isLoading}
+        editable={!isLoading && !isGoogleLoading}
       />
       
-
-      
       <TouchableOpacity 
-        style={[styles.primaryButton, isLoading && styles.disabledButton]} 
+        style={[styles.primaryButton, (isLoading || isGoogleLoading) && styles.disabledButton]} 
         onPress={handleLogin}
-        disabled={isLoading}
+        disabled={isLoading || isGoogleLoading}
       >
         <Text style={styles.primaryButtonText}>
-          {isLoading ? 'Signing In...' : 'Sign In'}
+          {isLoading ? 'Signing In...' : 'Sign In with Email'}
         </Text>
       </TouchableOpacity>
       
       <TouchableOpacity 
         style={styles.secondaryButton} 
         onPress={onBack}
-        disabled={isLoading}
+        disabled={isLoading || isGoogleLoading}
       >
         <Text style={styles.secondaryButtonText}>Back</Text>
       </TouchableOpacity>
@@ -444,11 +680,37 @@ export default function RootLayout() {
 
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(true);
+  const [isCheckingStorage, setIsCheckingStorage] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 2000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Check for existing user data on app start
+  useEffect(() => {
+    const checkUserData = async () => {
+      try {
+        const storageInfo = await StorageService.getStorageInfo();
+        console.log('Storage info:', storageInfo);
+        
+        // If user has completed onboarding or has user data, skip onboarding
+        if (storageInfo.hasCompletedOnboarding || storageInfo.hasUser) {
+          setShowOnboarding(false);
+        }
+      } catch (error) {
+        console.error('Error checking user data:', error);
+        // On error, show onboarding to be safe
+        setShowOnboarding(true);
+      } finally {
+        setIsCheckingStorage(false);
+      }
+    };
+
+    if (!showSplash) {
+      checkUserData();
+    }
+  }, [showSplash]);
 
   if (!loaded) {
     return null;
@@ -459,11 +721,19 @@ export default function RootLayout() {
     return <SplashScreen />;
   }
 
+  // Show loading while checking storage
+  if (isCheckingStorage) {
+    return <SplashScreen />;
+  }
+
   // Show onboarding flow
   if (showOnboarding) {
     return (
       <View style={{ flex: 1 }}>
-        <OnboardingFlow onComplete={() => setShowOnboarding(false)} />
+        <OnboardingFlow onComplete={async () => {
+          await StorageService.setOnboardingCompleted();
+          setShowOnboarding(false);
+        }} />
       </View>
     );
   }
@@ -806,5 +1076,50 @@ const styles = StyleSheet.create({
 
   disabledButton: {
     opacity: 0.6,
+  },
+  
+  // Google Sign-In Button Styles
+  googleButton: {
+    width: '100%',
+    height: 48,
+    backgroundColor: SparkColors.white,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: SparkColors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 12,
+  },
+  googleButtonText: {
+    color: SparkColors.black,
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: SparkColors.brown,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    color: SparkColors.lightGray,
+    fontSize: 14,
   },
 });
