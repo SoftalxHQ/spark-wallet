@@ -3,11 +3,65 @@ import { useFonts } from 'expo-font';
 import { SparkColors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
+import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View, Animated } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
 function SplashScreen() {
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.3)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const circleRotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Logo appears with scale and fade
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Continuous pulse for logo
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Continuous rotation for decorative circles
+    Animated.loop(
+      Animated.timing(circleRotateAnim, {
+        toValue: 1,
+        duration: 20000,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  // Animation interpolations
+  const circleRotation = circleRotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
     <LinearGradient
       colors={[SparkColors.black, SparkColors.darkBrown]}
@@ -15,15 +69,57 @@ function SplashScreen() {
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      {/* Decorative circles */}
-      <View style={[styles.decorCircle, { top: 80, right: -60, width: 260, height: 260 }]} />
-      <View style={[styles.decorCircle, { bottom: 120, left: -70, width: 220, height: 220, opacity: 0.18 }]} />
+      {/* Animated decorative circles */}
+      <Animated.View 
+        style={[
+          styles.decorCircle, 
+          { 
+            top: 80, 
+            right: -60, 
+            width: 260, 
+            height: 260,
+            transform: [{ rotate: circleRotation }]
+          }
+        ]} 
+      />
+      <Animated.View 
+        style={[
+          styles.decorCircle, 
+          { 
+            bottom: 120, 
+            left: -70, 
+            width: 220, 
+            height: 220, 
+            opacity: 0.18,
+            transform: [{ rotate: circleRotation }]
+          }
+        ]} 
+      />
       
-      <View style={styles.logoCircle}>
+      {/* Animated logo */}
+      <Animated.View 
+        style={[
+          styles.logoCircle,
+          {
+            opacity: fadeAnim,
+            transform: [
+              { scale: Animated.multiply(scaleAnim, pulseAnim) }
+            ]
+          }
+        ]}
+      >
         <Image source={require('../assets/images/logo.png')} style={styles.logoImage} />
-      </View>
-      <Text style={styles.splashTitle}>Spark Wallet</Text>
-      <Text style={styles.splashTagline}>Crypto & Everyday Payments</Text>
+      </Animated.View>
+      
+      {/* Static title */}
+      <Text style={styles.splashTitle}>
+        Spark Wallet
+      </Text>
+      
+      {/* Static tagline */}
+      <Text style={styles.splashTagline}>
+        Crypto & Everyday Payments
+      </Text>
     </LinearGradient>
   );
 }

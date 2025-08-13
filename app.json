@@ -1,10 +1,10 @@
 {
   "expo": {
     "name": "spark-wallet",
-    "slug": "spark-wallet",
+    "slug": "spark",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "sparkwallet",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,10 +13,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/spark-splash.png",
+        "backgroundColor": "#2C1A0B"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.softalxsolutions.spark"
     },
     "web": {
       "bundler": "metro",
@@ -28,15 +29,24 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/spark-splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#6B3F1D"
+          "backgroundColor": "#2C1A0B",
+          "duration": 1000,
+          "fade": true
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "86c286a8-a6d2-4532-a74f-920af9d7cb0b"
+      }
+    },
+    "owner": "softalx-solutions"
   }
 }
