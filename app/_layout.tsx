@@ -306,12 +306,26 @@ function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
             await StorageService.setOnboardingCompleted();
             
             // Create StarkNet smart contract wallet
+            console.log('=== WALLET CREATION PROCESS ===');
             try {
+              console.log('Starting wallet creation...');
               const walletData = await StarkNetWalletService.createSmartWallet();
+              console.log('Wallet created successfully:', walletData);
+              
+              console.log('Saving wallet to storage...');
               await StorageService.saveWalletData(walletData);
+              console.log('Wallet saved to storage successfully');
+              
+              // Verify wallet was saved
+              const savedWallet = await StorageService.getWalletData();
+              console.log('Verification - wallet retrieved from storage:', savedWallet);
+              
               console.log('StarkNet wallet created and saved:', walletData.address);
             } catch (walletError) {
               console.error('Error creating StarkNet wallet:', walletError);
+              if (walletError instanceof Error) {
+                console.error('Wallet creation stack trace:', walletError.stack);
+              }
               // Continue with onboarding even if wallet creation fails
             }
           }
@@ -384,7 +398,7 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
       alert('Please fill in all fields');
       return;
@@ -397,9 +411,52 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
       alert('Password must be at least 6 characters');
       return;
     }
-    // Simulate account creation
-    alert('Account created successfully!');
-    onBack();
+    
+    try {
+      // Save user data for email sign-up
+      const userData = {
+        id: email, // Use email as ID for email sign-up
+        email: email,
+        name: email.split('@')[0], // Use email prefix as name
+        hasCompletedOnboarding: true,
+        authMethod: 'email' as const,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString()
+      };
+      await StorageService.saveUserData(userData);
+      await StorageService.setOnboardingCompleted();
+      
+      // Create StarkNet smart contract wallet
+      console.log('=== WALLET CREATION PROCESS (EMAIL SIGN-UP) ===');
+      try {
+        console.log('Starting wallet creation...');
+        const walletData = await StarkNetWalletService.createSmartWallet();
+        console.log('Wallet created successfully:', walletData);
+        
+        console.log('Saving wallet to storage...');
+        await StorageService.saveWalletData(walletData);
+        console.log('Wallet saved to storage successfully');
+        
+        // Verify wallet was saved
+        const savedWallet = await StorageService.getWalletData();
+        console.log('Verification - wallet retrieved from storage:', savedWallet);
+        
+        console.log('StarkNet wallet created and saved:', walletData.address);
+        alert('Account created successfully! Your StarkNet wallet has been set up.');
+      } catch (walletError) {
+        console.error('Error creating StarkNet wallet:', walletError);
+        if (walletError instanceof Error) {
+          console.error('Wallet creation stack trace:', walletError.stack);
+        }
+        alert('Account created but wallet setup failed. Please try again.');
+        return;
+      }
+      
+      onBack(); // Navigate back to complete sign-up
+    } catch (error) {
+      console.error('Email sign-up error:', error);
+      alert('Failed to create account. Please try again.');
+    }
   };
 
   const handleGoogleSignUp = async () => {

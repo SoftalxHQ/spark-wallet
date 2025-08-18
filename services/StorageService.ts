@@ -66,10 +66,26 @@ class StorageService {
   // Wallet Data Management
   async saveWalletData(walletData: WalletData): Promise<void> {
     try {
-      await AsyncStorage.setItem(this.WALLET_DATA_KEY, JSON.stringify(walletData));
+      console.log('=== STORAGE SERVICE DEBUG ===');
+      console.log('Attempting to save wallet data:', walletData);
+      console.log('Storage key:', this.WALLET_DATA_KEY);
+      
+      const serializedData = JSON.stringify(walletData);
+      console.log('Serialized data:', serializedData);
+      
+      await AsyncStorage.setItem(this.WALLET_DATA_KEY, serializedData);
+      console.log('AsyncStorage.setItem completed successfully');
+      
+      // Immediate verification
+      const verification = await AsyncStorage.getItem(this.WALLET_DATA_KEY);
+      console.log('Immediate verification - data retrieved:', verification);
+      
       console.log('Wallet data saved successfully');
     } catch (error) {
       console.error('Error saving wallet data:', error);
+      if (error instanceof Error) {
+        console.error('Save error stack:', error.stack);
+      }
       throw error;
     }
   }

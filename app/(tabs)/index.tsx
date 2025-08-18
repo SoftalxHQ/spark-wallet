@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -12,9 +12,9 @@ import StorageService from '../../services/StorageService';
 
 export default function HomeScreen() {
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
-  const [totalUsdBalance, setTotalUsdBalance] = useState('$0.00');
+  const [totalUsdBalance, setTotalUsdBalance] = useState('0.00 USD');
   const [isLoading, setIsLoading] = useState(true);
-  const [isWalletDeployed, setIsWalletDeployed] = useState(false);
+  const [walletData, setWalletData] = useState<any>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showTokenModal, setShowTokenModal] = useState(false);
@@ -32,6 +32,7 @@ export default function HomeScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [transactionHash, setTransactionHash] = useState('');
   const [isSendingTransaction, setIsSendingTransaction] = useState(false);
+  const [showTokenDropdown, setShowTokenDropdown] = useState(false);
   const [accounts, setAccounts] = useState([{
     id: '1',
     name: 'Carrot',
@@ -39,38 +40,51 @@ export default function HomeScreen() {
     balance: '$0.00',
     isActive: true
   }]);
-  const [selectedNetwork, setSelectedNetwork] = useState('Sepolia');
+  const [selectedNetwork] = useState('Sepolia');
   
-  // Token data
-  const tokens = [
+  // Token icons mapping - using actual images
+  const getTokenIcon = (symbol: string) => {
+    switch (symbol) {
+      case 'STRK': return require('@/assets/images/strk.png');
+      case 'ETH': return require('@/assets/images/eth.png');
+      case 'USDC': return require('@/assets/images/usdc.png');
+      default: return require('@/assets/images/strk.png');
+    }
+  };
+
+  // Default tokens to always display
+  const defaultTokens = [
     {
-      id: 'eth',
-      name: 'Ethereum',
-      symbol: 'ETH',
-      icon: 'Ξ',
-      amount: '0.5',
-      value: '$1,000.00',
-      address: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
-    },
-    {
-      id: 'strk',
-      name: 'Starknet Token',
       symbol: 'STRK',
-      icon: '⚡',
-      amount: '100',
-      value: '$200.00',
-      address: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d'
+      name: 'StarkNet Token',
+      address: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+      decimals: 18,
+      balance: '0',
+      balanceFormatted: '0.000000',
+      usdValue: '0.00'
     },
     {
-      id: 'usdc',
-      name: 'USD Coin',
+      symbol: 'ETH',
+      name: 'Ethereum',
+      address: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
+      decimals: 18,
+      balance: '0',
+      balanceFormatted: '0.000000',
+      usdValue: '0.00'
+    },
+    {
       symbol: 'USDC',
-      icon: '💵',
-      amount: '500',
-      value: '$500.00',
-      address: '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8'
+      name: 'USD Coin',
+      address: '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8',
+      decimals: 6,
+      balance: '0',
+      balanceFormatted: '0.000000',
+      usdValue: '0.00'
     }
   ];
+
+  // Get tokens to display (real balances or defaults)
+  const tokensToDisplay = tokenBalances.length > 0 ? tokenBalances : defaultTokens;
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -86,23 +100,34 @@ export default function HomeScreen() {
     try {
       setIsLoading(true);
       
+      // Debug storage state
+      const storageInfo = await StorageService.getStorageInfo();
+      console.log('Storage info:', storageInfo);
+      
       // Load wallet data
       const walletData = await StorageService.getWalletData();
+      console.log('Raw wallet data from storage:', walletData);
+      setWalletData(walletData);
+      
       if (walletData) {
+        console.log('=== WALLET DEBUG INFO ===');
+        console.log('Loading balances for wallet address:', walletData.address);
+        console.log('Full wallet data:', walletData);
         
-        // Check if wallet is deployed
-        const deployed = await StarkNetWalletService.isWalletDeployed(walletData.address);
-        setIsWalletDeployed(deployed);
+        // Skip deployment check during balance loading - only check when sending tokens
         
         // Fetch token balances
         const balances = await StarkNetWalletService.getTokenBalances(walletData.address);
+        console.log('Fetched balances:', balances);
+        
+        // Set the token balances from the app's wallet
         setTokenBalances(balances);
         
-        // Calculate total USD balance
-        const totalUsd = balances.reduce((sum, token) => {
-          return sum + parseFloat(token.usdValue || '0');
+        // Calculate total balance (no USD conversion for now)
+        const totalBalance = balances.reduce((sum, token) => {
+          return sum + parseFloat(token.balanceFormatted || '0');
         }, 0);
-        setTotalUsdBalance(`$${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+        setTotalUsdBalance(`${totalBalance.toFixed(6)} Tokens`);
       }
     } catch (error) {
       console.error('Error loading wallet data:', error);
@@ -123,7 +148,8 @@ export default function HomeScreen() {
 
   const handleSendPress = () => {
     // Default to first token (ETH) for send modal
-    setSendSelectedToken(tokens[0]);
+    const firstToken = tokensToDisplay.length > 0 ? tokensToDisplay[0] : null;
+    setSendSelectedToken(firstToken);
     setShowSendModal(true);
     setRecipientAddress('');
     setSendAmount('');
@@ -139,7 +165,7 @@ export default function HomeScreen() {
 
   const handleMaxPress = () => {
     if (sendSelectedToken) {
-      setSendAmount(sendSelectedToken.balance.toString());
+      setSendAmount(sendSelectedToken.balanceFormatted);
     }
   };
 
@@ -166,7 +192,7 @@ export default function HomeScreen() {
     } else if (isNaN(Number(sendAmount)) || Number(sendAmount) <= 0) {
       setAmountError('Please enter a valid amount');
       isValid = false;
-    } else if (sendSelectedToken && Number(sendAmount) > sendSelectedToken.balance) {
+    } else if (sendSelectedToken && Number(sendAmount) > parseFloat(sendSelectedToken.balanceFormatted)) {
       setAmountError('Insufficient balance');
       isValid = false;
     }
@@ -180,44 +206,89 @@ export default function HomeScreen() {
     }
     
     setIsEstimatingGas(true);
-    // Simulate gas estimation
-    setTimeout(() => {
-      setEstimatedGasFee('0.0023');
-      setGasEstimated(true);
+    
+    try {
+      // Estimate gas fee based on selected token
+      let estimatedFee = '0.0023'; // Default ETH fee
+      
+      if (sendSelectedToken) {
+        switch (sendSelectedToken.symbol) {
+          case 'ETH':
+            estimatedFee = '0.0023';
+            break;
+          case 'STRK':
+            estimatedFee = '0.0015';
+            break;
+          case 'USDC':
+            estimatedFee = '0.0018';
+            break;
+          default:
+            estimatedFee = '0.0020';
+        }
+      }
+      
+      setEstimatedGasFee(estimatedFee);
+      
+      // Simulate gas estimation delay
+      setTimeout(() => {
+        setIsEstimatingGas(false);
+        setGasEstimated(true);
+      }, 2000);
+    } catch (error) {
+      console.error('Error estimating gas:', error);
       setIsEstimatingGas(false);
-    }, 2000);
+      alert('Failed to estimate gas fee. Please try again.');
+    }
   };
 
-  const handleSendTransaction = async () => {
+  const handleConfirmSend = async () => {
+    if (!walletData || !sendSelectedToken) {
+      alert('Wallet data or token not available');
+      return;
+    }
+
     setIsSendingTransaction(true);
     
-    // TODO: Implement actual send transaction logic
-    console.log('Sending transaction:', {
-      token: sendSelectedToken?.symbol,
-      recipient: recipientAddress,
-      amount: sendAmount,
-      gasFee: estimatedGasFee
-    });
-    
-    // Simulate transaction processing delay
-    setTimeout(() => {
-      // Simulate successful transaction with mock hash
-      const mockTxHash = '0x' + Math.random().toString(16).substr(2, 64);
-      setTransactionHash(mockTxHash);
+    try {
+      console.log('=== SENDING TOKEN FROM UI ===');
+      console.log('Wallet:', walletData.address);
+      console.log('Token:', sendSelectedToken.address);
+      console.log('Recipient:', recipientAddress);
+      console.log('Amount:', sendAmount);
+      console.log('Decimals:', sendSelectedToken.decimals);
       
-      // Close send modal and show success modal
-      setShowSendModal(false);
-      setShowSuccessModal(true);
+      const result = await StarkNetWalletService.sendToken(
+        walletData,
+        recipientAddress,
+        sendSelectedToken.address,
+        sendAmount,
+        sendSelectedToken.decimals
+      );
+      
+      if (result.success) {
+        console.log('Transaction successful:', result.transactionHash);
+        setIsSendingTransaction(false);
+        setShowSendModal(false);
+        setTransactionHash(result.transactionHash || '');
+        setShowSuccessModal(true);
+        
+        // Reset form
+        setRecipientAddress('');
+        setSendAmount('');
+        setGasEstimated(false);
+        
+        // Refresh balances
+        await loadWalletData();
+      } else {
+        console.error('Transaction failed:', result.error);
+        setIsSendingTransaction(false);
+        alert(`Transaction failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error sending transaction:', error);
       setIsSendingTransaction(false);
-      
-      // Reset form state
-      setRecipientAddress('');
-      setSendAmount('');
-      setGasEstimated(false);
-      setEstimatedGasFee('0.0023');
-      setAddressError('');
-      setAmountError('');
-    }, 2500); // 2.5 second delay
+      alert('Failed to send transaction. Please try again.');
+    }
   };
 
   const copyToClipboard = async (text: string) => {
@@ -246,11 +317,18 @@ export default function HomeScreen() {
     setTransactionHash('');
   };
 
-  const handleViewTransaction = () => {
-    // TODO: Open blockchain explorer with transaction hash
-    console.log('Viewing transaction:', transactionHash);
-    // For now, just copy the hash to clipboard
-    copyToClipboard(transactionHash);
+  const handleViewTransaction = async () => {
+    if (transactionHash) {
+      const voyagerUrl = `https://sepolia.voyager.online/tx/${transactionHash}`;
+      console.log('Opening Voyager:', voyagerUrl);
+      try {
+        await Linking.openURL(voyagerUrl);
+      } catch (error) {
+        console.error('Failed to open URL:', error);
+        // Fallback: copy URL to clipboard
+        copyToClipboard(voyagerUrl);
+      }
+    }
   };
 
   const formatTokenBalance = (balance: TokenBalance) => {
@@ -269,7 +347,6 @@ export default function HomeScreen() {
       if (walletData) {
         const result = await StarkNetWalletService.deployWallet(walletData);
         if (result.success) {
-          setIsWalletDeployed(true);
           // Update wallet data with deployment info
           const updatedWalletData = {
             ...walletData,
@@ -333,7 +410,7 @@ export default function HomeScreen() {
           {isLoading ? (
             <ActivityIndicator size="large" color={SparkColors.gold} style={{ marginVertical: 10 }} />
           ) : (
-            <ThemedText type="title" style={styles.balanceAmount}>{totalUsdBalance}</ThemedText>
+            <ThemedText type="title" style={styles.balanceAmount}>0.00</ThemedText>
           )}
         </View>
 
@@ -363,15 +440,19 @@ export default function HomeScreen() {
         <View style={styles.tokensSection}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Tokens</ThemedText>
           
-          {tokens.map((token) => (
+          {tokensToDisplay.map((token) => (
             <TouchableOpacity 
-              key={token.id} 
+              key={token.symbol} 
               style={styles.tokenCard}
               onPress={() => handleTokenPress(token)}
             >
               <View style={styles.tokenInfo}>
                 <View style={styles.tokenIcon}>
-                  <ThemedText style={styles.tokenIconText}>{token.icon}</ThemedText>
+                  <Image 
+                    source={getTokenIcon(token.symbol)} 
+                    style={styles.tokenIconImage}
+                    resizeMode="contain"
+                  />
                 </View>
                 <View style={styles.tokenDetails}>
                   <ThemedText style={styles.tokenName}>{token.name}</ThemedText>
@@ -379,8 +460,8 @@ export default function HomeScreen() {
                 </View>
               </View>
               <View style={styles.tokenBalance}>
-                <ThemedText style={styles.tokenAmount}>{token.amount}</ThemedText>
-                <ThemedText style={styles.tokenValue}>{token.value}</ThemedText>
+                <ThemedText style={styles.tokenAmount}>{token.balanceFormatted}</ThemedText>
+                <ThemedText style={styles.tokenValue}>${token.usdValue}</ThemedText>
               </View>
             </TouchableOpacity>
           ))}
@@ -490,35 +571,70 @@ export default function HomeScreen() {
             
             {selectedToken && (
               <View style={styles.tokenModalContent}>
+                {/* QR Code Section - At Top */}
+                <View style={styles.qrSection}>
+                  <ThemedText style={styles.qrLabel}>Receive {selectedToken.symbol}</ThemedText>
+                  <View style={styles.qrContainer}>
+                    <View style={styles.qrCode}>
+                      <ThemedText style={styles.qrPlaceholder}>QR CODE</ThemedText>
+                      <View style={styles.qrTokenLogo}>
+                        <Image 
+                          source={getTokenIcon(selectedToken.symbol)} 
+                          style={styles.qrTokenLogoImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                </View>
+                
+                {/* Token Name and Symbol - One Line */}
                 <View style={styles.tokenModalHeader}>
-                  <View style={styles.tokenModalIcon}>
-                    <ThemedText style={styles.tokenModalIconText}>{selectedToken.icon}</ThemedText>
-                  </View>
-                  <ThemedText type="title" style={styles.tokenModalName}>{selectedToken.name}</ThemedText>
-                  <ThemedText style={styles.tokenModalSymbol}>{selectedToken.symbol}</ThemedText>
+                  <ThemedText type="title" style={styles.tokenModalName}>
+                    {selectedToken.name} ({selectedToken.symbol})
+                  </ThemedText>
                 </View>
                 
+                {/* Wallet Address with Copy Icon */}
+                <View style={styles.tokenAddressSection}>
+                  <ThemedText style={styles.tokenAddressText}>
+                    {walletData?.address ? 
+                        `${walletData.address.slice(0, 10)}...${walletData.address.slice(-8)}` : 
+                        'Loading...'
+                      }
+                  </ThemedText>
+                  <TouchableOpacity 
+                    onPress={() => walletData?.address && copyToClipboard(walletData.address)}
+                  >
+                    <IconSymbol size={20} name="creditcard.fill" color={SparkColors.lightGray} />
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Token Value */}
                 <View style={styles.tokenModalBalance}>
-                  <ThemedText style={styles.tokenModalAmount}>{selectedToken.amount}</ThemedText>
-                  <ThemedText style={styles.tokenModalValue}>{selectedToken.value}</ThemedText>
+                  <ThemedText style={styles.tokenModalAmount}>
+                    {selectedToken.balanceFormatted} {selectedToken.symbol}
+                  </ThemedText>
                 </View>
                 
-                <View style={styles.tokenModalAddress}>
-                  <ThemedText style={styles.tokenModalAddressLabel}>Contract Address</ThemedText>
-                  <View style={styles.addressContainer}>
-                    <ThemedText style={styles.tokenModalAddressText}>
-                      {selectedToken.address.slice(0, 10)}...{selectedToken.address.slice(-8)}
-                    </ThemedText>
-                    <TouchableOpacity 
-                      style={[styles.copyButton, isCopied && styles.copyButtonCopied]}
-                      onPress={() => copyToClipboard(selectedToken.address)}
-                    >
-                      <ThemedText style={styles.copyButtonText}>
-                        {isCopied ? 'Copied' : 'Copy'}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  </View>
+                {/* Token Price */}
+                <View style={styles.tokenModalPrice}>
+                  <ThemedText style={styles.tokenModalValue}>${selectedToken.usdValue}</ThemedText>
                 </View>
+                
+                {/* Send Button - At Bottom */}
+                <TouchableOpacity 
+                  style={styles.sendTokenButton}
+                  onPress={() => {
+                    setShowTokenModal(false);
+                    setSendSelectedToken(selectedToken);
+                    setShowSendModal(true);
+                  }}
+                >
+                  <ThemedText style={styles.sendTokenButtonText}>Send {selectedToken.symbol}</ThemedText>
+                </TouchableOpacity>
+                
+               
               </View>
             )}
           </View>
@@ -558,15 +674,58 @@ export default function HomeScreen() {
             {sendSelectedToken && (
               <View style={styles.sendContent}>
                 {/* Token Selector */}
-                <TouchableOpacity style={styles.tokenSelector}>
-                  <View style={styles.tokenSelectorContent}>
-                    <View style={styles.tokenSelectorIcon}>
-                      <ThemedText style={styles.tokenIcon}>{sendSelectedToken.icon}</ThemedText>
+                <View style={styles.tokenSelectorContainer}>
+                  <TouchableOpacity 
+                    style={styles.tokenSelector}
+                    onPress={() => setShowTokenDropdown(!showTokenDropdown)}
+                  >
+                    <View style={styles.tokenSelectorContent}>
+                      <View style={styles.tokenSelectorIcon}>
+                        <Image 
+                          source={getTokenIcon(sendSelectedToken.symbol)} 
+                          style={styles.tokenSelectorIconImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                      <ThemedText style={styles.tokenSelectorText}>{sendSelectedToken.symbol}</ThemedText>
+                      <IconSymbol size={16} name="chevron.right" color={SparkColors.lightGray} style={styles.chevronDown} />
                     </View>
-                    <ThemedText style={styles.tokenSelectorText}>{sendSelectedToken.symbol}</ThemedText>
-                    <IconSymbol size={16} name="chevron.right" color={SparkColors.lightGray} style={styles.chevronDown} />
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                  
+                  {/* Token Dropdown */}
+                  {showTokenDropdown && (
+                    <View style={styles.tokenDropdown}>
+                      {tokensToDisplay.map((token, index) => (
+                        <TouchableOpacity 
+                          key={index}
+                          style={[
+                            styles.tokenDropdownItem,
+                            sendSelectedToken.symbol === token.symbol && styles.selectedTokenItem
+                          ]}
+                          onPress={() => {
+                            setSendSelectedToken(token);
+                            setShowTokenDropdown(false);
+                            setSendAmount(''); // Clear amount when token changes
+                          }}
+                        >
+                          <View style={styles.tokenDropdownContent}>
+                            <View style={styles.tokenDropdownIcon}>
+                              <Image 
+                                source={getTokenIcon(token.symbol)} 
+                                style={styles.tokenDropdownIconImage}
+                                resizeMode="contain"
+                              />
+                            </View>
+                            <View style={styles.tokenDropdownInfo}>
+                              <ThemedText style={styles.tokenDropdownSymbol}>{token.symbol}</ThemedText>
+                              <ThemedText style={styles.tokenDropdownBalance}>{parseFloat(token.balanceFormatted).toFixed(4)}</ThemedText>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
 
                 {/* Recipient Address Input */}
                 <View style={[styles.inputContainer, addressError && styles.inputError]}>
@@ -590,7 +749,7 @@ export default function HomeScreen() {
 
                 {/* Balance Display */}
                 <ThemedText style={styles.balanceText}>
-                  {sendSelectedToken.symbol} Balance: {sendSelectedToken.balance} (${sendSelectedToken.usdValue})
+                  {sendSelectedToken.symbol} Balance: {parseFloat(sendSelectedToken.balanceFormatted).toFixed(4)} (${sendSelectedToken.usdValue})
                 </ThemedText>
 
                 {/* Amount Input */}
@@ -625,9 +784,13 @@ export default function HomeScreen() {
                   <ThemedText style={styles.gasFeeLabel}>Pay Gas Fee with</ThemedText>
                   <View style={styles.gasFeeToken}>
                     <View style={styles.gasFeeIcon}>
-                      <ThemedText style={styles.tokenIcon}>{sendSelectedToken.icon}</ThemedText>
+                      <Image 
+                        source={getTokenIcon('STRK')} 
+                        style={styles.gasFeeTokenImage}
+                        resizeMode="contain"
+                      />
                     </View>
-                    <ThemedText style={styles.gasFeeText}>{sendSelectedToken.symbol}</ThemedText>
+                    <ThemedText style={styles.gasFeeText}>STRK</ThemedText>
                   </View>
                 </View>
 
@@ -635,14 +798,14 @@ export default function HomeScreen() {
                 {gasEstimated && (
                   <View style={styles.gasEstimateContainer}>
                     <ThemedText style={styles.gasEstimateLabel}>Estimated Gas Fee</ThemedText>
-                    <ThemedText style={styles.gasEstimateAmount}>{estimatedGasFee} {sendSelectedToken.symbol}</ThemedText>
+                    <ThemedText style={styles.gasEstimateAmount}>{estimatedGasFee} STRK</ThemedText>
                   </View>
                 )}
 
                 {/* Continue/Send Button */}
                 <TouchableOpacity 
                   style={[styles.continueButton, gasEstimated && styles.sendButton]} 
-                  onPress={gasEstimated ? handleSendTransaction : handleContinuePress}
+                  onPress={gasEstimated ? handleConfirmSend : handleContinuePress}
                   disabled={isEstimatingGas || isSendingTransaction}
                 >
                   {isEstimatingGas ? (
@@ -685,14 +848,6 @@ export default function HomeScreen() {
 
             {/* Success Title */}
             <ThemedText style={styles.successTitle}>Transaction Successful!</ThemedText>
-            
-            {/* Transaction Hash */}
-            <View style={styles.transactionHashContainer}>
-              <ThemedText style={styles.transactionHashLabel}>Transaction Hash:</ThemedText>
-              <ThemedText style={styles.transactionHash}>
-                {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
-              </ThemedText>
-            </View>
 
             {/* View Transaction Link */}
             <TouchableOpacity 
@@ -912,6 +1067,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  tokenSelectorIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: SparkColors.brown,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  tokenSelectorIconImage: {
+    width: 20,
+    height: 20,
+  },
+  gasFeeIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: SparkColors.brown,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  gasFeeTokenImage: {
+    width: 18,
+    height: 18,
+  },
   tokenIcon: {
     width: 40,
     height: 40,
@@ -920,6 +1101,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+  },
+  tokenIconImage: {
+    width: 32,
+    height: 32,
   },
   tokenIconText: {
     fontSize: 18,
@@ -1114,7 +1299,7 @@ const styles = StyleSheet.create({
   },
   tokenModalHeader: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 10,
   },
   tokenModalIcon: {
     width: 80,
@@ -1126,6 +1311,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 2,
     borderColor: SparkColors.brown,
+  },
+  tokenModalIconImage: {
+    width: 64,
+    height: 64,
   },
   tokenModalIconText: {
     fontSize: 40,
@@ -1143,7 +1332,8 @@ const styles = StyleSheet.create({
   },
   tokenModalBalance: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 10,
+    marginTop: 10,
   },
   tokenModalAmount: {
     color: SparkColors.white,
@@ -1211,15 +1401,6 @@ const styles = StyleSheet.create({
   tokenSelectorContent: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  tokenSelectorIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: SparkColors.brown,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
   },
   tokenSelectorText: {
     color: SparkColors.white,
@@ -1309,19 +1490,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  gasFeeIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: SparkColors.brown,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
   gasFeeText: {
     color: SparkColors.white,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '400',
   },
   gasEstimateContainer: {
     flexDirection: 'row',
@@ -1442,5 +1614,141 @@ const styles = StyleSheet.create({
     color: SparkColors.black,
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  // Token Dropdown Styles
+  tokenSelectorContainer: {
+    position: 'relative',
+    marginBottom: 20,
+  },
+  tokenDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: SparkColors.darkBrown,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: SparkColors.brown,
+    zIndex: 1000,
+    maxHeight: 150,
+  },
+  tokenDropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: SparkColors.brown,
+  },
+  selectedTokenItem: {
+    backgroundColor: SparkColors.brown,
+  },
+  tokenDropdownContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tokenDropdownIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: SparkColors.brown,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  tokenDropdownIconImage: {
+    width: 20,
+    height: 20,
+  },
+  tokenDropdownInfo: {
+    flex: 1,
+  },
+  tokenDropdownSymbol: {
+    color: SparkColors.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  tokenDropdownBalance: {
+    color: SparkColors.lightGray,
+    fontSize: 14,
+  },
+  // Send Token Button Styles
+  sendTokenButton: {
+    backgroundColor: SparkColors.gold,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    marginVertical: 20,
+    alignItems: 'center',
+    width: '100%',
+  },
+  sendTokenButtonText: {
+    color: SparkColors.black,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  // QR Code Styles
+  qrSection: {
+    alignItems: 'center',
+    marginVertical: 20,
+    width: '100%',
+  },
+  qrLabel: {
+    color: SparkColors.white,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  qrContainer: {
+    alignItems: 'center',
+  },
+  qrCode: {
+    width: 200,
+    height: 200,
+    backgroundColor: SparkColors.white,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  qrPlaceholder: {
+    color: SparkColors.black,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  qrTokenLogo: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: SparkColors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: SparkColors.lightGray,
+  },
+  qrTokenLogoImage: {
+    width: 32,
+    height: 32,
+  },
+  // Token Modal Price Section
+  tokenModalPrice: {
+    alignItems: 'center',
+    marginVertical: 0,
+  },
+  // Token Address Section
+  tokenAddressSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: SparkColors.darkBrown,
+    borderRadius: 8,
+    padding: 8,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: SparkColors.brown,
+  },
+  tokenAddressText: {
+    color: SparkColors.lightGray,
+    fontSize: 14,
+    fontFamily: 'monospace',
+    flex: 1,
   },
 });

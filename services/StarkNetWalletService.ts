@@ -2,17 +2,15 @@
 // Phase 1: Smart Contract Wallet Deployment
 // This service handles StarkNet account abstraction and smart contract wallets
 
-// TODO: Install starknet.js when ready
-// import { Account, Provider, Contract, ec, json, stark, RpcProvider } from 'starknet';
+// Import crypto polyfill first - MUST be before starknet imports
+import 'react-native-get-random-values';
+
+import { RpcProvider, Account, CallData, stark, ec, hash } from 'starknet';
 
 export interface StarkNetWalletData {
   address: string;
-  privateKey: string;
   publicKey: string;
-  deploymentTxHash?: string;
-  isDeployed: boolean;
-  accountType: 'OpenZeppelin' | 'Argent' | 'Braavos';
-  classHash: string;
+  privateKey: string;
   salt: string;
 }
 
@@ -34,17 +32,18 @@ export interface TransactionResult {
 
 class StarkNetWalletService {
   private static instance: StarkNetWalletService;
-  private provider: any; // Provider from starknet.js
+  private provider!: RpcProvider;
   private network: 'mainnet' | 'testnet' = 'testnet';
+  private rpcUrl = 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8';
 
-  // OpenZeppelin Account Contract Class Hash (Testnet)
-  private readonly OZ_ACCOUNT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f';
-  
-  // Common token addresses on StarkNet
+  // OpenZeppelin account class hash (Sepolia testnet) - matches extension
+  private readonly ACCOUNT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f';
+
+  // Common token addresses on StarkNet Sepolia (official addresses)
   private readonly TOKEN_ADDRESSES = {
     ETH: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
     STRK: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
-    USDC: '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8',
+    USDC: '0x053b40a647cedfca6ca84f542a0fe36736031905a9639a7f19a3c1e66bfd5080', // Official USDC address from starknet-addresses repo
   };
 
   static getInstance(): StarkNetWalletService {
@@ -59,82 +58,110 @@ class StarkNetWalletService {
   }
 
   private initializeProvider(): void {
-    // TODO: Initialize when starknet.js is installed
-    // this.provider = new RpcProvider({
-    //   nodeUrl: this.network === 'mainnet' 
-    //     ? 'https://starknet-mainnet.public.blastapi.io'
-    //     : 'https://starknet-testnet.public.blastapi.io'
-    // });
-    console.log('StarkNet provider initialized for', this.network);
+    this.provider = new RpcProvider({
+      nodeUrl: this.rpcUrl
+    });
+    console.log('StarkNet provider initialized with:', this.rpcUrl);
   }
 
-  // Phase 1: Smart Contract Wallet Creation
+  // Ensure proper address formatting (matches extension implementation)
+  private ensureAddressFormat(address: string): string {
+    if (!address.startsWith('0x')) {
+      address = '0x' + address;
+    }
+    // Ensure proper StarkNet address format
+    if (address.length < 66) {
+      address = '0x' + address.slice(2).padStart(64, '0');
+    }
+    return address;
+  }
+
+  // Phase 1: Create a new smart wallet using OpenZeppelin account
   async createSmartWallet(): Promise<StarkNetWalletData> {
     try {
-      console.log('Creating StarkNet smart contract wallet...');
+      console.log('Creating new StarkNet smart wallet...');
       
-      // TODO: Implement when starknet.js is available
-      // Generate private key
-      // const privateKey = stark.randomAddress();
-      // const publicKey = ec.starkCurve.getStarkKey(privateKey);
+      console.log('Step 1: Generating private key...');
+      const privateKey = stark.randomAddress();
+      console.log('Private key generated:', privateKey);
       
-      // Mock implementation for now
-      const mockPrivateKey = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-      const mockPublicKey = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-      const mockSalt = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+      console.log('Step 2: Deriving public key...');
+      const publicKey = ec.starkCurve.getStarkKey(privateKey);
+      console.log('Public key derived:', publicKey);
       
-      // Calculate contract address
-      // const contractAddress = hash.calculateContractAddressFromHash(
-      //   mockSalt,
-      //   this.OZ_ACCOUNT_CLASS_HASH,
-      //   [mockPublicKey],
-      //   0
-      // );
+      console.log('Step 3: Compiling constructor calldata...');
+      const constructorCalldata = CallData.compile({ publicKey });
+      console.log('Constructor calldata:', constructorCalldata);
       
-      const mockAddress = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-
+      console.log('Step 4: Calculating contract address...');
+      console.log('Using account class hash:', this.ACCOUNT_CLASS_HASH);
+      console.log('Using salt (public key):', publicKey);
+      
+      const rawAddress = hash.calculateContractAddressFromHash(
+        publicKey, // salt
+        this.ACCOUNT_CLASS_HASH,
+        constructorCalldata,
+        0 // deployer address
+      );
+      console.log('Raw calculated address:', rawAddress);
+      
+      const address = this.ensureAddressFormat(rawAddress);
+      console.log('Formatted wallet address:', address);
+      
       const walletData: StarkNetWalletData = {
-        address: mockAddress,
-        privateKey: mockPrivateKey,
-        publicKey: mockPublicKey,
-        isDeployed: false,
-        accountType: 'OpenZeppelin',
-        classHash: this.OZ_ACCOUNT_CLASS_HASH,
-        salt: mockSalt
+        address: address,
+        publicKey: publicKey,
+        privateKey: privateKey,
+        salt: publicKey
       };
-
-      console.log('Smart contract wallet created:', walletData.address);
+      
+      console.log('Final wallet data object:', {
+        address: walletData.address,
+        publicKey: walletData.publicKey,
+        privateKey: '[REDACTED]',
+        salt: walletData.salt
+      });
+      
+      console.log('Smart wallet created successfully');
       return walletData;
     } catch (error) {
       console.error('Error creating smart wallet:', error);
+      if (error instanceof Error) {
+        console.error('Creation error stack:', error.stack);
+      }
       throw error;
     }
   }
 
-  // Deploy the smart contract wallet to StarkNet
-  async deployWallet(walletData: StarkNetWalletData): Promise<TransactionResult> {
+  // Phase 2: Deploy wallet (when first transaction is made)
+  async deployWallet(walletData: StarkNetWalletData): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
     try {
-      console.log('Deploying smart contract wallet to StarkNet...');
+      console.log('Deploying wallet:', walletData.address);
       
-      // TODO: Implement actual deployment when starknet.js is available
-      // const account = new Account(this.provider, walletData.address, walletData.privateKey);
-      // const deployAccountPayload = {
-      //   classHash: walletData.classHash,
-      //   constructorCalldata: [walletData.publicKey],
-      //   contractAddressSalt: walletData.salt,
-      // };
-      // const { transaction_hash } = await account.deployAccount(deployAccountPayload);
+      // Create account instance
+      const account = new Account(this.provider, walletData.address, walletData.privateKey);
       
-      // Mock deployment for now
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
-      const mockTxHash = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+      // Deploy account contract
+      const deployAccountPayload = {
+        classHash: this.ACCOUNT_CLASS_HASH,
+        constructorCalldata: CallData.compile([walletData.publicKey]),
+        contractAddress: walletData.address,
+        addressSalt: walletData.salt
+      };
+
+      const { transaction_hash: transactionHash } = await account.deployAccount(deployAccountPayload);
       
-      console.log('Wallet deployed with tx hash:', mockTxHash);
+      console.log('Wallet deployment transaction:', transactionHash);
+      
+      // Wait for transaction confirmation
+      await this.provider.waitForTransaction(transactionHash);
+      console.log('Wallet deployed successfully');
       
       return {
         success: true,
-        transactionHash: mockTxHash
+        transactionHash: transactionHash
       };
+      
     } catch (error) {
       console.error('Error deploying wallet:', error);
       return {
@@ -144,60 +171,147 @@ class StarkNetWalletService {
     }
   }
 
-  // Phase 3: Get token balances
+  // Phase 3: Get token balances using proper StarkNet.js methods
   async getTokenBalances(walletAddress: string): Promise<TokenBalance[]> {
     try {
+      console.log('=== BALANCE FETCHING DEBUG ===');
       console.log('Fetching token balances for:', walletAddress);
+      console.log('Using RPC endpoint:', this.provider.channel.nodeUrl);
+      console.log('Network:', this.network);
       
-      // TODO: Implement actual balance fetching when starknet.js is available
-      // const ethContract = new Contract(ERC20_ABI, this.TOKEN_ADDRESSES.ETH, this.provider);
-      // const strkContract = new Contract(ERC20_ABI, this.TOKEN_ADDRESSES.STRK, this.provider);
-      // const usdcContract = new Contract(ERC20_ABI, this.TOKEN_ADDRESSES.USDC, this.provider);
-      
-      // Mock balances for now
-      const mockBalances: TokenBalance[] = [
-        {
-          address: this.TOKEN_ADDRESSES.ETH,
-          symbol: 'ETH',
-          name: 'Ethereum',
-          decimals: 18,
-          balance: '1500000000000000000', // 1.5 ETH in wei
-          balanceFormatted: '1.5',
-          usdValue: '3750.00'
-        },
-        {
-          address: this.TOKEN_ADDRESSES.STRK,
-          symbol: 'STRK',
-          name: 'StarkNet Token',
-          decimals: 18,
-          balance: '10000000000000000000', // 10 STRK
-          balanceFormatted: '10.0',
-          usdValue: '25.00'
-        },
-        {
-          address: this.TOKEN_ADDRESSES.USDC,
-          symbol: 'USDC',
-          name: 'USD Coin',
-          decimals: 6,
-          balance: '1000000000', // 1000 USDC
-          balanceFormatted: '1000.0',
-          usdValue: '1000.00'
-        }
+      const balances: TokenBalance[] = [];
+
+      // Token configurations
+      const tokens = [
+        { address: this.TOKEN_ADDRESSES.ETH, symbol: 'ETH', name: 'Ethereum', decimals: 18 },
+        { address: this.TOKEN_ADDRESSES.STRK, symbol: 'STRK', name: 'StarkNet Token', decimals: 18 },
+        { address: this.TOKEN_ADDRESSES.USDC, symbol: 'USDC', name: 'USD Coin', decimals: 6 }
       ];
 
-      return mockBalances;
+      // Fetch balances for each token using multiple methods for debugging
+      for (const token of tokens) {
+        try {
+          console.log(`\n--- Fetching ${token.symbol} balance ---`);
+          console.log(`Wallet address: ${walletAddress}`);
+          console.log(`Token contract: ${token.address}`);
+          
+          // Method 1: Direct provider.callContract (current approach)
+          const result = await this.provider.callContract({
+            contractAddress: token.address,
+            entrypoint: "balanceOf",
+            calldata: [walletAddress],
+          });
+
+          console.log(`${token.symbol} Raw response:`, result);
+
+          let balanceValue = 0;
+          let balanceString = '0';
+
+          // Handle different response formats (matches extension logic)
+          if (result && result.length > 0) {
+            if (result.length >= 2) {
+              // Uint256 format (low, high) - exact extension implementation
+              const low = BigInt(result[0]);
+              const high = BigInt(result[1]) << 128n;
+              const balanceInWei = low + high;
+              
+              balanceString = balanceInWei.toString();
+              balanceValue = Number(balanceInWei) / (10 ** token.decimals);
+              
+              console.log(`${token.symbol} Uint256 conversion (extension pattern):`, {
+                low: low.toString(),
+                high: high.toString(),
+                combined: balanceInWei.toString(),
+                formatted: balanceValue
+              });
+            } else {
+              // Single value format
+              const balanceInWei = BigInt(result[0]);
+              balanceString = balanceInWei.toString();
+              balanceValue = Number(balanceInWei) / (10 ** token.decimals);
+              
+              console.log(`${token.symbol} Single value:`, {
+                raw: balanceInWei.toString(),
+                formatted: balanceValue
+              });
+            }
+          }
+          
+          // Format balance with proper precision
+          const balanceFormatted = balanceValue.toFixed(6);
+          
+          // Mock USD values for now
+          const mockUsdPrices: { [key: string]: number } = {
+            'ETH': 2500,
+            'STRK': 2.5,
+            'USDC': 1.0
+          };
+          
+          const usdValue = (balanceValue * (mockUsdPrices[token.symbol] || 0)).toFixed(2);
+          
+          console.log(`${token.symbol} Final values:`, {
+            balance: balanceString,
+            formatted: balanceFormatted,
+            usd: usdValue
+          });
+          
+          balances.push({
+            symbol: token.symbol,
+            name: token.name,
+            address: token.address,
+            decimals: token.decimals,
+            balance: balanceString,
+            balanceFormatted: balanceValue > 0 ? balanceValue.toFixed(6).toString().slice(0, 10) : '0.0',
+            usdValue: '0.00' // No aggregator - always 0.00
+          });
+
+        } catch (error) {
+          console.error(`Error fetching ${token.symbol} balance:`, error);
+          
+          // Add zero balance on error
+          balances.push({
+            address: token.address,
+            symbol: token.symbol,
+            name: token.name,
+            decimals: token.decimals,
+            balance: '0',
+            balanceFormatted: '0.000000',
+            usdValue: '0.00'
+          });
+        }
+      }
+
+      console.log('\n=== FINAL BALANCES ===');
+      console.log('All balances:', balances);
+      return balances;
+
     } catch (error) {
-      console.error('Error fetching token balances:', error);
+      console.error('Error in getTokenBalances:', error);
       return [];
     }
   }
 
-  // Phase 2: Send tokens
+  // Phase 4: Check if wallet is deployed
+  async isWalletDeployed(address: string): Promise<boolean> {
+    try {
+      console.log('Checking if wallet is deployed:', address);
+      const classHash = await this.provider.getClassHashAt(address);
+      const isDeployed = classHash !== '0x0';
+      console.log('Wallet deployed:', isDeployed);
+      return isDeployed;
+    } catch (error) {
+      console.error('Error checking wallet deployment:', error);
+      return false;
+    }
+  }
+
+  // Phase 5: Send tokens with deploy-on-first-transfer pattern
   async sendToken(
     fromWalletData: StarkNetWalletData,
     toAddress: string,
     tokenAddress: string,
-    amount: string
+    amount: string,
+    decimals: number = 18
   ): Promise<TransactionResult> {
     try {
       console.log('Sending token transaction...');
@@ -205,22 +319,68 @@ class StarkNetWalletService {
       console.log('To:', toAddress);
       console.log('Token:', tokenAddress);
       console.log('Amount:', amount);
+      console.log('Decimals:', decimals);
       
-      // TODO: Implement actual transaction when starknet.js is available
-      // const account = new Account(this.provider, fromWalletData.address, fromWalletData.privateKey);
-      // const tokenContract = new Contract(ERC20_ABI, tokenAddress, this.provider);
-      // const transferCall = tokenContract.populate('transfer', [toAddress, amount]);
-      // const { transaction_hash } = await account.execute(transferCall);
+      // Create account instance
+      const account = new Account(this.provider, fromWalletData.address, fromWalletData.privateKey);
       
-      // Mock transaction for now
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate network delay
-      const mockTxHash = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+      // Check if wallet is deployed
+      const isDeployed = await this.isWalletDeployed(fromWalletData.address);
       
-      console.log('Transaction sent with hash:', mockTxHash);
+      if (!isDeployed) {
+        console.log('Wallet not deployed, deploying first...');
+        const deployResult = await this.deployWallet(fromWalletData);
+        if (!deployResult.success) {
+          return {
+            success: false,
+            error: `Failed to deploy wallet: ${deployResult.error}`
+          };
+        }
+        console.log('Wallet deployed successfully');
+      } else {
+        console.log('Wallet already deployed');
+      }
+      
+      // Convert amount to uint256 format
+      const amountInWei = BigInt(parseFloat(amount) * (10 ** decimals));
+      const amountUint256 = {
+        low: amountInWei & ((1n << 128n) - 1n),
+        high: amountInWei >> 128n
+      };
+      
+      console.log('Amount in wei:', amountInWei.toString());
+      console.log('Amount uint256:', amountUint256);
+      
+      // Prepare transfer calldata
+      const transferCalldata = CallData.compile({
+        recipient: toAddress,
+        amount: amountUint256
+      });
+      
+      console.log('Transfer calldata:', transferCalldata);
+      
+      // Execute transfer transaction
+      const result = await account.execute(
+        [
+          {
+            contractAddress: tokenAddress,
+            entrypoint: "transfer",
+            calldata: transferCalldata,
+          },
+        ]
+      );
+      
+      const transaction_hash = result.transaction_hash;
+      
+      console.log('Transaction sent with hash:', transaction_hash);
+      
+      // Wait for transaction confirmation
+      await this.provider.waitForTransaction(transaction_hash);
+      console.log('Transaction confirmed');
       
       return {
         success: true,
-        transactionHash: mockTxHash
+        transactionHash: transaction_hash
       };
     } catch (error) {
       console.error('Error sending transaction:', error);
@@ -231,20 +391,6 @@ class StarkNetWalletService {
     }
   }
 
-  // Check if wallet is deployed
-  async isWalletDeployed(address: string): Promise<boolean> {
-    try {
-      // TODO: Implement actual check when starknet.js is available
-      // const code = await this.provider.getCode(address);
-      // return code.bytecode.length > 0;
-      
-      // Mock check for now
-      return Math.random() > 0.3; // 70% chance wallet is deployed
-    } catch (error) {
-      console.error('Error checking wallet deployment:', error);
-      return false;
-    }
-  }
 
   // Get transaction status
   async getTransactionStatus(txHash: string): Promise<'pending' | 'accepted' | 'rejected'> {
@@ -272,6 +418,36 @@ class StarkNetWalletService {
   // Get current network
   getNetwork(): 'mainnet' | 'testnet' {
     return this.network;
+  }
+
+  // Helper method to format token amounts
+  private formatTokenAmount(balance: string, decimals: number): string {
+    try {
+      const balanceNum = BigInt(balance);
+      const divisor = BigInt(10 ** decimals);
+      
+      // Calculate integer and fractional parts
+      const integerPart = balanceNum / divisor;
+      const fractionalPart = balanceNum % divisor;
+      
+      // Convert to decimal string
+      if (fractionalPart === 0n) {
+        return integerPart.toString() + '.0';
+      }
+      
+      // Format fractional part with proper decimal places
+      const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+      const trimmedFractional = fractionalStr.replace(/0+$/, '');
+      
+      if (trimmedFractional === '') {
+        return integerPart.toString() + '.0';
+      }
+      
+      return `${integerPart.toString()}.${trimmedFractional}`;
+    } catch (error) {
+      console.error('Error formatting token amount:', error);
+      return '0.0';
+    }
   }
 }
 
