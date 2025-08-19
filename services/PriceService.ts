@@ -10,8 +10,8 @@ export class PriceService {
   private CACHE_DURATION = 30000; // 30 seconds to respect rate limits
 
   private static readonly TOKEN_IDS = {
-    ETH: 'ethereum',
     STRK: 'starknet',
+    ETH: 'ethereum',
     USDC: 'usd-coin',
   };
 

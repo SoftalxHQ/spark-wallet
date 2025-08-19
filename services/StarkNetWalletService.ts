@@ -43,8 +43,8 @@ class StarkNetWalletService {
 
   // Common token addresses on StarkNet Sepolia (official addresses)
   private readonly TOKEN_ADDRESSES = {
-    ETH: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
     STRK: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+    ETH: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
     USDC: '0x053b40a647cedfca6ca84f542a0fe36736031905a9639a7f19a3c1e66bfd5080', // Official USDC address from starknet-addresses repo
   };
 
@@ -185,8 +185,8 @@ class StarkNetWalletService {
 
       // Token configurations
       const tokens = [
-        { address: this.TOKEN_ADDRESSES.ETH, symbol: 'ETH', name: 'Ethereum', decimals: 18 },
         { address: this.TOKEN_ADDRESSES.STRK, symbol: 'STRK', name: 'StarkNet Token', decimals: 18 },
+        { address: this.TOKEN_ADDRESSES.ETH, symbol: 'ETH', name: 'Ethereum', decimals: 18 },
         { address: this.TOKEN_ADDRESSES.USDC, symbol: 'USDC', name: 'USD Coin', decimals: 6 }
       ];
 
