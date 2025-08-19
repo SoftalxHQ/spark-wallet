@@ -123,11 +123,11 @@ export default function HomeScreen() {
         // Set the token balances from the app's wallet
         setTokenBalances(balances);
         
-        // Calculate total balance (no USD conversion for now)
-        const totalBalance = balances.reduce((sum, token) => {
-          return sum + parseFloat(token.balanceFormatted || '0');
+        // Calculate total USD balance from all tokens
+        const totalUsdBalance = balances.reduce((sum, token) => {
+          return sum + parseFloat(token.usdValue || '0');
         }, 0);
-        setTotalUsdBalance(`${totalBalance.toFixed(6)} Tokens`);
+        setTotalUsdBalance(`$${totalUsdBalance.toFixed(2)}`);
       }
     } catch (error) {
       console.error('Error loading wallet data:', error);
@@ -208,32 +208,19 @@ export default function HomeScreen() {
     setIsEstimatingGas(true);
     
     try {
-      // Estimate gas fee based on selected token
-      let estimatedFee = '0.0023'; // Default ETH fee
+      // Get real gas estimation from StarkNet
+      const gasEstimate = await StarkNetWalletService.estimateTransferGas(
+        walletData.address,
+        sendSelectedToken.address,
+        recipientAddress,
+        sendAmount,
+        sendSelectedToken.decimals
+      );
       
-      if (sendSelectedToken) {
-        switch (sendSelectedToken.symbol) {
-          case 'ETH':
-            estimatedFee = '0.0023';
-            break;
-          case 'STRK':
-            estimatedFee = '0.0015';
-            break;
-          case 'USDC':
-            estimatedFee = '0.0018';
-            break;
-          default:
-            estimatedFee = '0.0020';
-        }
-      }
-      
-      setEstimatedGasFee(estimatedFee);
-      
-      // Simulate gas estimation delay
-      setTimeout(() => {
-        setIsEstimatingGas(false);
-        setGasEstimated(true);
-      }, 2000);
+      console.log('Gas estimate result:', gasEstimate);
+      setEstimatedGasFee(gasEstimate);
+      setIsEstimatingGas(false);
+      setGasEstimated(true);
     } catch (error) {
       console.error('Error estimating gas:', error);
       setIsEstimatingGas(false);
@@ -410,7 +397,7 @@ export default function HomeScreen() {
           {isLoading ? (
             <ActivityIndicator size="large" color={SparkColors.gold} style={{ marginVertical: 10 }} />
           ) : (
-            <ThemedText type="title" style={styles.balanceAmount}>0.00</ThemedText>
+            <ThemedText type="title" style={styles.balanceAmount}>{totalUsdBalance}</ThemedText>
           )}
         </View>
 

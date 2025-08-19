@@ -5,7 +5,9 @@
 // Import crypto polyfill first - MUST be before starknet imports
 import 'react-native-get-random-values';
 
-import { RpcProvider, Account, CallData, stark, ec, hash } from 'starknet';
+import { Account, CallData, RpcProvider, cairo, ec, hash, stark } from 'starknet';
+import priceService from './PriceService';
+import StorageService from './StorageService';
 
 export interface StarkNetWalletData {
   address: string;
@@ -237,22 +239,15 @@ class StarkNetWalletService {
             }
           }
           
-          // Format balance with proper precision
-          const balanceFormatted = balanceValue.toFixed(6);
-          
-          // Mock USD values for now
-          const mockUsdPrices: { [key: string]: number } = {
-            'ETH': 2500,
-            'STRK': 2.5,
-            'USDC': 1.0
-          };
-          
-          const usdValue = (balanceValue * (mockUsdPrices[token.symbol] || 0)).toFixed(2);
+          // Get live USD price
+          const usdPrice = await priceService.getTokenPrice(token.symbol);
+          const usdValue = (balanceValue * usdPrice).toFixed(2);
           
           console.log(`${token.symbol} Final values:`, {
             balance: balanceString,
-            formatted: balanceFormatted,
-            usd: usdValue
+            balanceValue: balanceValue,
+            usdPrice: usdPrice,
+            usdValue: usdValue
           });
           
           balances.push({
@@ -262,7 +257,7 @@ class StarkNetWalletService {
             decimals: token.decimals,
             balance: balanceString,
             balanceFormatted: balanceValue > 0 ? balanceValue.toFixed(6).toString().slice(0, 10) : '0.0',
-            usdValue: '0.00' // No aggregator - always 0.00
+            usdValue: usdValue
           });
 
         } catch (error) {
@@ -275,7 +270,7 @@ class StarkNetWalletService {
             name: token.name,
             decimals: token.decimals,
             balance: '0',
-            balanceFormatted: '0.000000',
+            balanceFormatted: '0.0',
             usdValue: '0.00'
           });
         }
@@ -286,8 +281,68 @@ class StarkNetWalletService {
       return balances;
 
     } catch (error) {
-      console.error('Error in getTokenBalances:', error);
+      console.error('Error getting token balances:', error);
       return [];
+    }
+  }
+
+  async estimateTransferGas(
+    fromAddress: string,
+    tokenAddress: string,
+    toAddress: string,
+    amount: string,
+    decimals: number
+  ): Promise<string> {
+    try {
+      const provider = new RpcProvider({
+        nodeUrl: 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
+      });
+
+      // Get wallet data to use real private key
+      const walletData = await StorageService.getWalletData();
+      if (!walletData) {
+        throw new Error('No wallet data found');
+      }
+
+      // Convert amount to proper format
+      const amountInWei = BigInt(Math.floor(parseFloat(amount) * (10 ** decimals)));
+      
+      // Create account instance with real private key for accurate estimation
+      const account = new Account(
+        provider,
+        fromAddress,
+        walletData.privateKey
+      );
+
+      // Use proper estimateInvokeFee method with correct calldata format
+      const feeEstimate = await account.estimateInvokeFee({
+        contractAddress: tokenAddress,
+        entrypoint: 'transfer',
+        calldata: [toAddress, cairo.uint256(amountInWei)]
+      });
+
+      // Handle different fee units (WEI for legacy, FRI for V3)
+      let feeInStrk: number;
+      if (feeEstimate.unit === 'FRI') {
+        // V3 transaction - fee is already in STRK (FRI)
+        feeInStrk = Number(feeEstimate.overall_fee) / (10 ** 18);
+      } else {
+        // Legacy transaction - fee is in WEI, convert to STRK
+        feeInStrk = Number(feeEstimate.overall_fee) / (10 ** 18);
+      }
+      
+      console.log('Gas estimation:', {
+        overall_fee: feeEstimate.overall_fee.toString(),
+        unit: feeEstimate.unit,
+        suggestedMaxFee: feeEstimate.suggestedMaxFee.toString(),
+        feeInStrk: feeInStrk.toFixed(4)
+      });
+
+      return feeInStrk.toFixed(4);
+    } catch (error) {
+      console.error('Error estimating gas:', error);
+      // Return fallback estimate
+      return '0.002';
     }
   }
 
