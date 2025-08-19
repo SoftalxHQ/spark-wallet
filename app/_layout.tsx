@@ -1,15 +1,18 @@
+// Import crypto polyfill FIRST - must be before any starknet imports
+import '../polyfills';
+
 import { useFonts } from 'expo-font';
 
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SparkColors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Text, View, Image, TouchableOpacity, TextInput, Alert, StyleSheet } from 'react-native';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Alert, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 // import SimpleGoogleSignInService from '../services/SimpleGoogleSignInService';
 import MockGoogleSignInService from '../services/MockGoogleSignInService';
-import StorageService from '../services/StorageService';
 import StarkNetWalletService from '../services/StarkNetWalletService';
+import StorageService from '../services/StorageService';
 
 
 
@@ -451,8 +454,6 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
         alert('Account created but wallet setup failed. Please try again.');
         return;
       }
-      
-      onBack(); // Navigate back to complete sign-up
     } catch (error) {
       console.error('Email sign-up error:', error);
       alert('Failed to create account. Please try again.');

@@ -1,3 +1,6 @@
+// Import crypto polyfill FIRST - must be before any starknet imports
+import '../../polyfills';
+
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -7,6 +10,7 @@ import { ActivityIndicator, Image, Linking, Modal, RefreshControl, ScrollView, S
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SparkColors } from '@/constants/Colors';
+import WalletQRCode from '../../components/WalletQRCode';
 import StarkNetWalletService, { TokenBalance } from '../../services/StarkNetWalletService';
 import StorageService from '../../services/StorageService';
 
@@ -75,7 +79,7 @@ export default function HomeScreen() {
     {
       symbol: 'USDC',
       name: 'USD Coin',
-      address: '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8',
+      address: '0x053b40a647cedfca6ca84f542a0fe36736031905a9639a7f19a3c1e66bfd5080',
       decimals: 6,
       balance: '0',
       balanceFormatted: '0.000000',
@@ -561,18 +565,13 @@ export default function HomeScreen() {
                 {/* QR Code Section - At Top */}
                 <View style={styles.qrSection}>
                   <ThemedText style={styles.qrLabel}>Receive {selectedToken.symbol}</ThemedText>
-                  <View style={styles.qrContainer}>
-                    <View style={styles.qrCode}>
-                      <ThemedText style={styles.qrPlaceholder}>QR CODE</ThemedText>
-                      <View style={styles.qrTokenLogo}>
-                        <Image 
-                          source={getTokenIcon(selectedToken.symbol)} 
-                          style={styles.qrTokenLogoImage}
-                          resizeMode="contain"
-                        />
-                      </View>
-                    </View>
-                  </View>
+                  <WalletQRCode 
+                    walletAddress={walletData?.address || ''}
+                    size={180}
+                    showAddress={false}
+                    showCopyButton={false}
+                    logoSource={getTokenIcon(selectedToken.symbol)}
+                  />
                 </View>
                 
                 {/* Token Name and Symbol - One Line */}

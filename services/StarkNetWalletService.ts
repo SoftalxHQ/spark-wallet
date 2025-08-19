@@ -304,6 +304,16 @@ class StarkNetWalletService {
         throw new Error('No wallet data found');
       }
 
+      // Check if wallet is deployed first
+      const isDeployed = await this.isWalletDeployed(fromAddress);
+      
+      if (!isDeployed) {
+        // For undeployed wallets, return a combined estimate:
+        // Deployment cost (~0.002 STRK) + Transfer cost (~0.0005 STRK)
+        console.log('Wallet not deployed, returning combined deployment + transfer estimate');
+        return '0.0025';
+      }
+
       // Convert amount to proper format
       const amountInWei = BigInt(Math.floor(parseFloat(amount) * (10 ** decimals)));
       
@@ -349,13 +359,12 @@ class StarkNetWalletService {
   // Phase 4: Check if wallet is deployed
   async isWalletDeployed(address: string): Promise<boolean> {
     try {
-      console.log('Checking if wallet is deployed:', address);
       const classHash = await this.provider.getClassHashAt(address);
       const isDeployed = classHash !== '0x0';
-      console.log('Wallet deployed:', isDeployed);
       return isDeployed;
-    } catch (error) {
-      console.error('Error checking wallet deployment:', error);
+    } catch {
+      // Expected error for undeployed wallets - "Contract not found"
+      // This is normal behavior, not an actual error
       return false;
     }
   }
