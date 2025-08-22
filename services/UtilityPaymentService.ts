@@ -18,6 +18,7 @@ export interface UtilityPaymentRequest {
   customerName?: string;
   variationCode?: string; // For data plans, TV packages, etc.
   meterType?: 'prepaid' | 'postpaid'; // For electricity only
+  subscriptionType?: 'change' | 'renew'; // For TV subscriptions only
 }
 
 export interface UtilityPaymentResult {
@@ -144,7 +145,10 @@ class UtilityPaymentService {
       throw new Error('VTpass service not initialized');
     }
 
-    const phone = VTpassService.formatNigerianPhone(request.customerPhone);
+    // For TV, use default phone if not provided; for others, format the provided phone
+    const phone = request.type === 'tv' ? 
+      (request.customerPhone ? VTpassService.formatNigerianPhone(request.customerPhone) : '08000000000') :
+      VTpassService.formatNigerianPhone(request.customerPhone);
 
     switch (request.type) {
       case 'electricity':
@@ -158,11 +162,12 @@ class UtilityPaymentService {
         });
 
       case 'airtime':
+        const airtimeRequestId = `SPARK_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         return await this.vtpassService.buyAirtime({
           serviceID: this.getServiceId(request),
           amount: request.amount,
           phone: request.accountNumber, // For airtime, account number is the phone
-          request_id: requestId
+          request_id: airtimeRequestId
         });
 
       case 'data':
@@ -182,13 +187,14 @@ class UtilityPaymentService {
         if (!request.variationCode) {
           throw new Error('TV package variation code is required');
         }
-        return await this.vtpassService.payTVSubscription({
+        return await this.vtpassService.buyTVSubscription({
           serviceID: this.getServiceId(request),
           billersCode: request.accountNumber,
           variation_code: request.variationCode,
           amount: request.amount,
           phone: phone,
-          request_id: requestId
+          request_id: requestId,
+          subscription_type: request.subscriptionType || 'change' // Use user selection or default to 'change'
         });
 
       default:
@@ -237,12 +243,17 @@ class UtilityPaymentService {
         }
 
       case 'tv':
-        switch (provider) {
-          case 'DSTV': return VTPASS_SERVICES.TV.DSTV;
-          case 'GOTV': return VTPASS_SERVICES.TV.GOTV;
-          case 'STARTIMES': return VTPASS_SERVICES.TV.STARTIMES;
-          default: throw new Error(`Unsupported TV provider: ${provider}`);
-        }
+        // Handle both service names and provider names
+        if (provider.includes('DSTV') || provider === 'DSTV') return VTPASS_SERVICES.TV.DSTV;
+        if (provider.includes('GOTV') || provider === 'GOTV') return VTPASS_SERVICES.TV.GOTV;
+        if (provider.includes('STARTIMES') || provider === 'STARTIMES') return VTPASS_SERVICES.TV.STARTIMES;
+        
+        // Direct serviceID mapping (when serviceID is passed directly)
+        if (provider === 'DSTV' || provider.toLowerCase() === 'dstv') return 'dstv';
+        if (provider === 'GOTV' || provider.toLowerCase() === 'gotv') return 'gotv';
+        if (provider === 'STARTIMES' || provider.toLowerCase() === 'startimes') return 'startimes';
+        
+        throw new Error(`Unsupported TV provider: ${provider}`);
 
       default:
         throw new Error(`Unsupported service type: ${request.type}`);
@@ -266,15 +277,21 @@ class UtilityPaymentService {
    * Validate payment request
    */
   private validatePaymentRequest(request: UtilityPaymentRequest): void {
-    if (!request.type || !request.serviceProvider || !request.accountNumber || !request.amount || !request.customerPhone) {
+    if (!request.type || !request.serviceProvider || !request.accountNumber || !request.amount) {
       throw new Error('Missing required payment parameters');
+    }
+
+    // Phone number is optional for TV subscriptions
+    if (request.type !== 'tv' && !request.customerPhone) {
+      throw new Error('Customer phone number is required');
     }
 
     if (request.amount <= 0) {
       throw new Error('Payment amount must be greater than 0');
     }
 
-    if (!VTpassService.validateNigerianPhone(request.customerPhone)) {
+    // Validate phone number only if provided
+    if (request.customerPhone && !VTpassService.validateNigerianPhone(request.customerPhone)) {
       throw new Error('Invalid Nigerian phone number format');
     }
 
@@ -351,7 +368,7 @@ class UtilityPaymentService {
       customerPhone: ''
     });
 
-    return await this.vtpassService.getVariationCodes(serviceId);
+    return await this.vtpassService.getServiceVariations(serviceId);
   }
 
   /**

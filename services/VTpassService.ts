@@ -60,6 +60,7 @@ export interface TVSubscriptionRequest {
   amount: number;
   phone: string;
   request_id: string;
+  subscription_type: string; // 'change' for new/bouquet change, 'renew' for renewal
 }
 
 export interface VTpassResponse {
@@ -167,17 +168,18 @@ class VTpassService {
   async verifyService(request: ServiceVerificationRequest): Promise<ServiceVerificationResponse> {
     try {
       const url = `${this.baseUrl}merchant-verify`;
-      const params = new URLSearchParams({
+      const payload = {
         serviceID: request.serviceID,
         billersCode: request.billersCode,
         ...(request.type && { type: request.type })
-      });
+      };
 
-      console.log('VTpass: Verifying service:', { url: `${url}?${params}` });
+      console.log('VTpass: Verifying service:', { url, payload });
 
-      const response = await fetch(`${url}?${params}`, {
-        method: 'GET',
-        headers: this.getGetHeaders(),
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.getPostHeaders(),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -363,46 +365,134 @@ class VTpassService {
   }
 
   /**
-   * Pay TV subscription
+   * Buy TV subscription (DSTV, GOTV, Startimes)
+   * Requires smartcard verification first
    */
-  async payTVSubscription(request: TVSubscriptionRequest): Promise<VTpassResponse> {
+  async buyTVSubscription(request: TVSubscriptionRequest): Promise<VTpassResponse> {
     try {
-      console.log('VTpass: Processing TV subscription:', request);
+      console.log('VTpass: Processing TV subscription purchase:', request);
 
-      // Verify smart card number first
-      await this.verifyService({
+      // Step 1: Verify smartcard number first
+      const verificationUrl = `${this.baseUrl}merchant-verify`;
+      const verifyPayload = {
         serviceID: request.serviceID,
-        billersCode: request.billersCode
+        billersCode: request.billersCode,
+      };
+
+      console.log('VTpass: Verifying smartcard before purchase:', verifyPayload);
+      console.log('VTpass: Using credentials:', {
+        apiKey: this.config.apiKey.substring(0, 8) + '...',
+        publicKey: this.config.publicKey.substring(0, 15) + '...',
+        environment: this.config.environment
       });
 
-      const url = `${this.baseUrl}pay`;
-      const payload = {
+      const verifyResponse = await fetch(verificationUrl, {
+        method: 'POST',
+        headers: this.getPostHeaders(),
+        body: JSON.stringify(verifyPayload),
+      });
+
+      const verifyData = await verifyResponse.json();
+      console.log('VTpass: Smartcard verification response:', verifyData);
+
+      if (!verifyResponse.ok || verifyData.code !== '000') {
+        throw new Error(`Smartcard verification failed: ${verifyData.response_description || 'Invalid smartcard number'}`);
+      }
+
+      // Step 2: Proceed with payment
+      const paymentUrl = `${this.baseUrl}pay`;
+      const paymentPayload = {
         serviceID: request.serviceID,
         billersCode: request.billersCode,
         variation_code: request.variation_code,
         amount: request.amount,
         phone: request.phone,
         request_id: request.request_id,
+        subscription_type: request.subscription_type,
       };
 
-      console.log('VTpass: TV subscription payload:', payload);
+      console.log('VTpass: TV subscription payment payload:', paymentPayload);
 
-      const response = await fetch(url, {
+      const paymentResponse = await fetch(paymentUrl, {
         method: 'POST',
         headers: this.getPostHeaders(),
-        body: JSON.stringify(payload),
+        body: JSON.stringify(paymentPayload),
       });
 
-      const data = await response.json();
-      console.log('VTpass: TV subscription response:', data);
+      const paymentData = await paymentResponse.json();
+      console.log('VTpass: TV subscription payment response:', paymentData);
 
-      if (!response.ok || data.code !== '000') {
-        throw new Error(`TV subscription failed: ${data.response_description || response.statusText}`);
+      if (!paymentResponse.ok || paymentData.code !== '000') {
+        throw new Error(`TV subscription payment failed: ${paymentData.response_description || paymentResponse.statusText}`);
       }
 
-      return data;
+      return paymentData;
     } catch (error) {
-      console.error('VTpass: TV subscription error:', error);
+      console.error('VTpass: TV subscription purchase error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Pay TV subscription (renewal) - includes smartcard verification
+   * For existing subscriptions that need renewal
+   */
+  async payTVSubscription(request: TVSubscriptionRequest): Promise<VTpassResponse> {
+    try {
+      console.log('VTpass: Processing TV subscription payment:', request);
+
+      // First verify the smartcard number
+      const verificationUrl = `${this.baseUrl}merchant-verify`;
+      const verifyPayload = {
+        serviceID: request.serviceID,
+        billersCode: request.billersCode,
+      };
+
+      console.log('VTpass: Verifying smartcard:', verifyPayload);
+
+      const verifyResponse = await fetch(verificationUrl, {
+        method: 'POST',
+        headers: this.getPostHeaders(),
+        body: JSON.stringify(verifyPayload),
+      });
+
+      const verifyData = await verifyResponse.json();
+      console.log('VTpass: Smartcard verification response:', verifyData);
+
+      if (!verifyResponse.ok || verifyData.code !== '000') {
+        throw new Error(`Smartcard verification failed: ${verifyData.response_description || 'Invalid smartcard number'}`);
+      }
+
+      // Proceed with payment if verification successful
+      const paymentUrl = `${this.baseUrl}pay`;
+      const paymentPayload = {
+        serviceID: request.serviceID,
+        billersCode: request.billersCode,
+        variation_code: request.variation_code,
+        amount: request.amount,
+        phone: request.phone,
+        request_id: request.request_id,
+        subscription_type: request.subscription_type,
+      };
+
+      console.log('VTpass: TV payment payload:', paymentPayload);
+
+      const paymentResponse = await fetch(paymentUrl, {
+        method: 'POST',
+        headers: this.getPostHeaders(),
+        body: JSON.stringify(paymentPayload),
+      });
+
+      const paymentData = await paymentResponse.json();
+      console.log('VTpass: TV payment response:', paymentData);
+
+      if (!paymentResponse.ok || paymentData.code !== '000') {
+        throw new Error(`TV subscription payment failed: ${paymentData.response_description || paymentResponse.statusText}`);
+      }
+
+      return paymentData;
+    } catch (error) {
+      console.error('VTpass: TV subscription payment error:', error);
       throw error;
     }
   }
@@ -437,6 +527,11 @@ class VTpassService {
    */
   async getServices(identifier: string): Promise<any> {
     try {
+      // TV services use a different endpoint pattern
+      if (identifier === 'tv') {
+        return await this.getTVServices();
+      }
+
       const url = `${this.baseUrl}services`;
       const params = new URLSearchParams({ identifier });
 
@@ -457,6 +552,72 @@ class VTpassService {
       return data;
     } catch (error) {
       console.error('VTpass: Get services error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get TV services (DSTV, GOTV, Startimes) with their variations
+   */
+  async getTVServices(): Promise<any> {
+    try {
+      console.log('VTpass: Getting TV services');
+
+      // Get DSTV, GOTV, and Startimes services
+      const tvProviders = ['dstv', 'gotv', 'startimes'];
+      const services = [];
+
+      for (const serviceID of tvProviders) {
+        try {
+          const variations = await this.getServiceVariations(serviceID);
+          if (variations && variations.content) {
+            services.push({
+              serviceID: serviceID,
+              name: variations.content.ServiceName || serviceID.toUpperCase(),
+              image: null, // TV services don't have provider images in the same way
+              variations: variations.content.variations || []
+            });
+          }
+        } catch (error) {
+          console.warn(`VTpass: Failed to fetch ${serviceID} variations:`, error);
+        }
+      }
+
+      return {
+        response_description: '000',
+        content: services
+      };
+    } catch (error) {
+      console.error('VTpass: Get TV services error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get service variations for a specific service (used for TV services)
+   */
+  async getServiceVariations(serviceID: string): Promise<any> {
+    try {
+      const url = `${this.baseUrl}service-variations`;
+      const params = new URLSearchParams({ serviceID });
+
+      console.log('VTpass: Getting service variations for:', serviceID);
+
+      const response = await fetch(`${url}?${params}`, {
+        method: 'GET',
+        headers: this.getGetHeaders(),
+      });
+
+      const data = await response.json();
+      console.log('VTpass: Service variations response:', JSON.stringify(data, null, 2));
+
+      if (!response.ok || data.response_description !== '000') {
+        throw new Error(`Failed to fetch service variations: ${data.response_description || response.statusText}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('VTpass: Get service variations error:', error);
       throw error;
     }
   }

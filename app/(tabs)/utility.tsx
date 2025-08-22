@@ -32,6 +32,8 @@ export default function UtilityScreen() {
   const [selectedDataPlan, setSelectedDataPlan] = useState<any>(null);
   const [showDataPlanDropdown, setShowDataPlanDropdown] = useState(false);
   const [isLoadingDataPlans, setIsLoadingDataPlans] = useState(false);
+  const [subscriptionType, setSubscriptionType] = useState<'change' | 'renew'>('change');
+  const [showSubscriptionTypeDropdown, setShowSubscriptionTypeDropdown] = useState(false);
 
   const utilities = [
     { name: 'Electricity', icon: '⚡', color: SparkColors.gold, type: 'electricity' },
@@ -281,8 +283,8 @@ export default function UtilityScreen() {
   };
 
   const processPayment = async () => {
-    // For airtime/data, skip customer details check
-    if ((selectedUtility !== 'airtime' && selectedUtility !== 'data') && !customerDetails) {
+    // For airtime/data/tv, skip customer details check (TV handles verification internally)
+    if ((selectedUtility !== 'airtime' && selectedUtility !== 'data' && selectedUtility !== 'tv') && !customerDetails) {
       Alert.alert('Error', 'Please verify customer details first');
       return;
     }
@@ -304,7 +306,8 @@ export default function UtilityScreen() {
         customerPhone: (selectedUtility === 'airtime' || selectedUtility === 'data') ? 
           accountNumber.trim() : customerPhone.trim(),
         ...(selectedUtility === 'electricity' && { meterType }),
-        ...(selectedUtility === 'data' && selectedDataPlan && { variationCode: selectedDataPlan.code })
+        ...(selectedUtility === 'data' && selectedDataPlan && { variationCode: selectedDataPlan.code }),
+        ...(selectedUtility === 'tv' && selectedPlan && { variationCode: selectedPlan, subscriptionType })
       };
 
       const utilityService = UtilityPaymentService.getInstance();
@@ -521,6 +524,47 @@ export default function UtilityScreen() {
                 keyboardType={selectedUtility === 'airtime' || selectedUtility === 'data' ? 'phone-pad' : 'numeric'}
               />
             </View>
+
+            {/* Subscription Type Selection (for Cable TV) */}
+            {selectedUtility === 'tv' && (
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.inputLabel}>Subscription Type</ThemedText>
+                <TouchableOpacity 
+                  style={styles.providerSelector}
+                  onPress={() => setShowSubscriptionTypeDropdown(!showSubscriptionTypeDropdown)}
+                >
+                  <ThemedText style={styles.providerText}>
+                    {subscriptionType === 'change' ? 'New/Change Bouquet' : 'Renew Current Bouquet'}
+                  </ThemedText>
+                  <ThemedText style={styles.providerText}>▼</ThemedText>
+                </TouchableOpacity>
+                
+                {showSubscriptionTypeDropdown && (
+                  <View style={styles.providerDropdown}>
+                    <TouchableOpacity 
+                      style={styles.providerOption}
+                      onPress={() => {
+                        setSubscriptionType('change');
+                        setShowSubscriptionTypeDropdown(false);
+                      }}
+                    >
+                      <ThemedText style={styles.providerOptionText}>New/Change Bouquet</ThemedText>
+                      <ThemedText style={[styles.providerOptionText, { fontSize: 12, opacity: 0.7 }]}>Subscribe to new or different package</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.providerOption}
+                      onPress={() => {
+                        setSubscriptionType('renew');
+                        setShowSubscriptionTypeDropdown(false);
+                      }}
+                    >
+                      <ThemedText style={styles.providerOptionText}>Renew Current Bouquet</ThemedText>
+                      <ThemedText style={[styles.providerOptionText, { fontSize: 12, opacity: 0.7 }]}>Extend current subscription</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Plan Selection (for Cable TV) */}
             {selectedUtility === 'tv' && availablePlans.length > 0 && (
