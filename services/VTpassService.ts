@@ -27,12 +27,29 @@ export interface AirtimeRequest {
   request_id: string;
 }
 
+export interface DataVariation {
+  variation_code: string;
+  name: string;
+  variation_amount: string;
+  fixedPrice: string;
+}
+
+export interface DataVariationsResponse {
+  response_description: string;
+  content: {
+    ServiceName: string;
+    serviceID: string;
+    convinience_fee: string;
+    variations: DataVariation[];
+  };
+}
+
 export interface DataRequest {
   serviceID: string; // 'mtn-data', 'airtel-data', 'glo-data', '9mobile-data'
   billersCode: string; // Phone number
-  variation_code: string; // Data plan code
-  amount: number;
-  phone: string;
+  variation_code: string; // Data plan variation code
+  amount: number; // Amount in NGN (ignored by VTpass, determined by variation)
+  phone: string; // Customer contact number
   request_id: string;
 }
 
@@ -273,9 +290,43 @@ class VTpassService {
   }
 
   /**
+   * Get data bundle variations for any network
+   */
+  async getDataVariations(serviceID: string): Promise<DataVariationsResponse> {
+    const url = `${this.baseUrl}service-variations?serviceID=${serviceID}`;
+    
+    try {
+      console.log('VTpass: Fetching data variations from:', url);
+      console.log('VTpass: Using credentials:', { 
+        apiKey: this.config.apiKey?.substring(0, 8) + '...', 
+        publicKey: this.config.publicKey?.substring(0, 8) + '...', 
+        environment: this.config.environment 
+      });
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getGetHeaders()
+      });
+
+      console.log('VTpass: Data variations response status:', response.status);
+      const data = await response.json();
+      console.log('VTpass: Data variations response:', JSON.stringify(data, null, 2));
+
+      if (!response.ok || data.response_description !== '000') {
+        throw new Error(`Failed to get data variations: ${data.message || data.response_description || response.statusText}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('VTpass get data variations error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Buy data bundle
    */
-  async buyDataBundle(request: DataRequest): Promise<VTpassResponse> {
+  async buyData(request: DataRequest): Promise<VTpassResponse> {
     try {
       console.log('VTpass: Processing data bundle purchase:', request);
 
@@ -284,7 +335,7 @@ class VTpassService {
         serviceID: request.serviceID,
         billersCode: request.billersCode,
         variation_code: request.variation_code,
-        amount: request.amount,
+        amount: request.amount, // This will be ignored by VTpass, variation determines price
         phone: request.phone,
         request_id: request.request_id,
       };
@@ -506,6 +557,11 @@ export const VTPASS_SERVICES = {
     AIRTEL: 'airtel-data', 
     GLO: 'glo-data',
     NINE_MOBILE: '9mobile-data',
+  },
+
+  // Get all supported data service IDs
+  getSupportedDataServices(): string[] {
+    return Object.values(this.DATA);
   },
   
   // TV

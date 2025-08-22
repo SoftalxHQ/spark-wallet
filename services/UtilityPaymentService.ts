@@ -169,7 +169,7 @@ class UtilityPaymentService {
         if (!request.variationCode) {
           throw new Error('Data plan variation code is required');
         }
-        return await this.vtpassService.buyDataBundle({
+        return await this.vtpassService.buyData({
           serviceID: this.getServiceId(request),
           billersCode: request.accountNumber,
           variation_code: request.variationCode,
@@ -200,7 +200,12 @@ class UtilityPaymentService {
    * Get VTpass service ID from request
    */
   private getServiceId(request: UtilityPaymentRequest): string {
-    const provider = request.serviceProvider.toUpperCase();
+    let provider = request.serviceProvider.toUpperCase();
+
+    // For data services, extract network name from service ID (e.g., "mtn-data" -> "MTN")
+    if (request.type === 'data' && provider.includes('-DATA')) {
+      provider = provider.replace('-DATA', '');
+    }
 
     switch (request.type) {
       case 'electricity':
@@ -317,6 +322,17 @@ class UtilityPaymentService {
       console.error(`Error fetching ${utilityType} services:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Get data variations for a specific service
+   */
+  async getDataVariations(serviceId: string) {
+    if (!this.vtpassService) {
+      throw new Error('VTpass service not initialized');
+    }
+    
+    return await this.vtpassService.getDataVariations(serviceId);
   }
 
   /**

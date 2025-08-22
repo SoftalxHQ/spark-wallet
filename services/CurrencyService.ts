@@ -52,43 +52,59 @@ export class CurrencyService {
       return this.cachedUsdToNgnRate;
     }
 
-    try {
-      // Using exchangerate-api.com v6 with API key
-      const apiKey = Constants.expoConfig?.extra?.EXCHANGE_RATE_API_KEY;
-      console.log('Currency: API Key loaded:', apiKey ? `${apiKey.substring(0, 8)}...` : 'NOT FOUND');
-      
-      const url = `https://v6.exchangerate-api.com/v6/${apiKey}/latest/USD`;
-      console.log('Currency: Fetching from URL:', url);
-      
-      const response = await fetch(url);
-      console.log('Currency: Response status:', response.status);
-      console.log('Currency: Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      const data: ExchangeRateResponse = await response.json();
-      console.log('Currency: Raw API response:', JSON.stringify(data, null, 2));
-      
-      if (data.result === 'success' && data.conversion_rates && data.conversion_rates.NGN) {
-        this.cachedUsdToNgnRate = data.conversion_rates.NGN;
-        this.lastRateUpdate = now;
-        console.log(`Currency: USD to NGN rate updated: ${this.cachedUsdToNgnRate}`);
-        return this.cachedUsdToNgnRate;
+    // Retry logic - attempt API call twice before falling back
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`Currency: Attempt ${attempt}/2 to fetch exchange rate`);
+        
+        // Using exchangerate-api.com v6 with API key
+        const apiKey = Constants.expoConfig?.extra?.EXCHANGE_RATE_API_KEY;
+        console.log('Currency: API Key loaded:', apiKey ? `${apiKey.substring(0, 8)}...` : 'NOT FOUND');
+        
+        const url = `https://v6.exchangerate-api.com/v6/${apiKey}/latest/USD`;
+        console.log('Currency: Fetching from URL:', url);
+        
+        const response = await fetch(url);
+        console.log('Currency: Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data: ExchangeRateResponse = await response.json();
+        
+        if (data.result === 'success' && data.conversion_rates && data.conversion_rates.NGN) {
+          this.cachedUsdToNgnRate = data.conversion_rates.NGN;
+          this.lastRateUpdate = now;
+          console.log(`Currency: USD to NGN rate updated: ${this.cachedUsdToNgnRate} (attempt ${attempt})`);
+          return this.cachedUsdToNgnRate;
+        }
+        
+        console.error('Currency: Invalid response structure:', {
+          result: data.result,
+          hasConversionRates: !!data.conversion_rates,
+          hasNGN: data.conversion_rates ? !!data.conversion_rates.NGN : false
+        });
+        
+        throw new Error(`Invalid exchange rate response: ${data.result || 'unknown error'}`);
+      } catch (error) {
+        console.error(`Currency: Attempt ${attempt} failed:`, error);
+        
+        // If this is the last attempt, use fallback
+        if (attempt === 2) {
+          console.error('Currency: All attempts failed, using fallback rate');
+          const fallbackRate = 1650; // Approximate USD to NGN rate
+          console.log(`Currency: Using fallback USD to NGN rate: ${fallbackRate}`);
+          return fallbackRate;
+        }
+        
+        // Wait 1 second before retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      
-      console.error('Currency: Invalid response structure:', {
-        result: data.result,
-        hasConversionRates: !!data.conversion_rates,
-        hasNGN: data.conversion_rates ? !!data.conversion_rates.NGN : false
-      });
-      
-      throw new Error(`Invalid exchange rate response: ${data.result || 'unknown error'}`);
-    } catch (error) {
-      console.error('Currency: Failed to fetch USD to NGN rate:', error);
-      
-      // Fallback to approximate rate if API fails
-      const fallbackRate = 1650; // Approximate USD to NGN rate
-      console.log(`Currency: Using fallback USD to NGN rate: ${fallbackRate}`);
-      return fallbackRate;
     }
+
+    // This should never be reached, but just in case
+    return 1650;
   }
 
   /**

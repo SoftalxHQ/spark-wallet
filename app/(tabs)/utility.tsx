@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useEffect } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View, Modal, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, TouchableOpacity, ScrollView, Alert, TextInput, Modal, ActivityIndicator, StyleSheet, Image } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -28,6 +28,10 @@ export default function UtilityScreen() {
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [availableProviders, setAvailableProviders] = useState<any[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
+  const [availableDataPlans, setAvailableDataPlans] = useState<any[]>([]);
+  const [selectedDataPlan, setSelectedDataPlan] = useState<any>(null);
+  const [showDataPlanDropdown, setShowDataPlanDropdown] = useState(false);
+  const [isLoadingDataPlans, setIsLoadingDataPlans] = useState(false);
 
   const utilities = [
     { name: 'Electricity', icon: '⚡', color: SparkColors.gold, type: 'electricity' },
@@ -104,25 +108,21 @@ export default function UtilityScreen() {
     }
   };
 
-  const fetchAvailablePlans = async (provider: string, smartcardNumber: string) => {
-    if (selectedUtility !== 'tv' || !provider || !smartcardNumber) return;
+  const fetchPlans = async (provider: string) => {
+    if (selectedUtility !== 'tv' || !provider) return;
 
     setIsLoadingPlans(true);
     try {
       const utilityService = UtilityPaymentService.getInstance();
-      const variationsResponse = await utilityService.getTVPackages(provider);
+      const packages = await utilityService.getTVPackages(provider);
       
-      if (variationsResponse && variationsResponse.content) {
-        const plans = variationsResponse.content.map((variation: any) => ({
+      if (packages && packages.content && packages.content.variations) {
+        const plans = packages.content.variations.map((variation: any) => ({
           code: variation.variation_code,
           name: variation.name,
           amount: parseFloat(variation.variation_amount)
         }));
         setAvailablePlans(plans);
-      } else {
-        // Fallback to mock data if API fails
-        const mockPlans = getMockPlansForProvider(provider);
-        setAvailablePlans(mockPlans);
       }
     } catch (error) {
       console.error('Error fetching plans:', error);
@@ -133,6 +133,35 @@ export default function UtilityScreen() {
       setIsLoadingPlans(false);
     }
   };
+
+  const fetchDataPlans = async (provider: string) => {
+    if (selectedUtility !== 'data' || !provider) return;
+
+    setIsLoadingDataPlans(true);
+    try {
+      const utilityService = UtilityPaymentService.getInstance();
+      // Find the actual serviceID from the available providers
+      const selectedProviderData = availableProviders.find(p => p.name === provider);
+      const serviceId = selectedProviderData?.serviceID || 'mtn-data';
+      const variationsResponse = await utilityService.getDataVariations(serviceId);
+      
+      if (variationsResponse && variationsResponse.content && variationsResponse.content.variations) {
+        const plans = variationsResponse.content.variations.map((variation: any) => ({
+          code: variation.variation_code,
+          name: variation.name,
+          amount: parseFloat(variation.variation_amount)
+        }));
+        setAvailableDataPlans(plans);
+      }
+    } catch (error) {
+      console.error('Error fetching data plans:', error);
+      setAvailableDataPlans([]);
+    } finally {
+      setIsLoadingDataPlans(false);
+    }
+  };
+
+
 
   const getMockPlansForProvider = (provider: string) => {
     const plans: { [key: string]: any[] } = {
@@ -181,10 +210,19 @@ export default function UtilityScreen() {
       Alert.alert('Error', 'Please enter account/meter number');
       return false;
     }
-    if (!amount.trim() || parseFloat(amount) <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return false;
+    // For data, check if plan is selected instead of amount
+    if (selectedUtility === 'data') {
+      if (!selectedDataPlan) {
+        Alert.alert('Error', 'Please select a data plan');
+        return false;
+      }
+    } else {
+      if (!amount.trim() || parseFloat(amount) <= 0) {
+        Alert.alert('Error', 'Please enter a valid amount');
+        return false;
+      }
     }
+    
     if (!customerPhone.trim()) {
       Alert.alert('Error', 'Please enter customer phone number');
       return false;
@@ -261,11 +299,12 @@ export default function UtilityScreen() {
         type: selectedUtility as any,
         serviceProvider: selectedProvider,
         accountNumber: accountNumber.trim(),
-        amount: parseFloat(amount),
+        amount: selectedUtility === 'data' && selectedDataPlan ? selectedDataPlan.amount : parseFloat(amount),
         // For airtime/data, use the phone number as both account and customer phone
         customerPhone: (selectedUtility === 'airtime' || selectedUtility === 'data') ? 
           accountNumber.trim() : customerPhone.trim(),
-        ...(selectedUtility === 'electricity' && { meterType })
+        ...(selectedUtility === 'electricity' && { meterType }),
+        ...(selectedUtility === 'data' && selectedDataPlan && { variationCode: selectedDataPlan.code })
       };
 
       const utilityService = UtilityPaymentService.getInstance();
@@ -399,11 +438,19 @@ export default function UtilityScreen() {
                         onPress={() => {
                           setSelectedProvider(provider.serviceID);
                           setShowProviderDropdown(false);
+                          // Auto-fetch plans for TV when provider is selected
+                          if (selectedUtility === 'tv') {
+                            fetchPlans(provider.name);
+                          }
+                          // Auto-fetch data plans when provider is selected
+                          if (selectedUtility === 'data') {
+                            fetchDataPlans(provider.name);
+                          }
                         }}
                       >
                         {provider.image && (
-                          <Image 
-                            source={{ uri: provider.image }} 
+                          <Image
+                            source={{ uri: provider.image }}
                             style={styles.providerImage}
                             resizeMode="contain"
                           />
@@ -463,7 +510,7 @@ export default function UtilityScreen() {
                   setAccountNumber(text);
                   // Auto-fetch plans when smartcard number is entered for TV
                   if (selectedUtility === 'tv' && selectedProvider && text.length >= 10) {
-                    fetchAvailablePlans(selectedProvider, text);
+                    fetchPlans(selectedProvider);
                   }
                 }}
                 placeholder={selectedUtility === 'electricity' ? 'Enter meter number' : 
@@ -506,6 +553,61 @@ export default function UtilityScreen() {
                         </ThemedText>
                       </TouchableOpacity>
                     ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Data Plan Selection */}
+            {selectedUtility === 'data' && selectedProvider && (
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.inputLabel}>Data Plan</ThemedText>
+                <TouchableOpacity 
+                  style={styles.providerSelector}
+                  onPress={() => {
+                    if (availableDataPlans.length === 0) {
+                      fetchDataPlans(selectedProvider);
+                    }
+                    setShowDataPlanDropdown(!showDataPlanDropdown);
+                  }}
+                >
+                  <ThemedText style={styles.providerText}>
+                    {selectedDataPlan ? selectedDataPlan.name : 'Select Data Plan'}
+                  </ThemedText>
+                  <IconSymbol name="chevron.right" size={16} color={SparkColors.white} />
+                </TouchableOpacity>
+                
+                {showDataPlanDropdown && (
+                  <View style={styles.providerDropdown}>
+                    {isLoadingDataPlans ? (
+                      <View style={[styles.providerOption, { flexDirection: 'row', alignItems: 'center' }]}>
+                        <ActivityIndicator color={SparkColors.gold} />
+                        <ThemedText style={[styles.providerOptionText, { marginLeft: 8 }]}>
+                          Loading data plans...
+                        </ThemedText>
+                      </View>
+                    ) : (
+                      availableDataPlans.map((plan, index) => (
+                        <TouchableOpacity
+                          key={`${plan.code}-${index}`}
+                          style={styles.providerOption}
+                          onPress={() => {
+                            setSelectedDataPlan(plan);
+                            setAmount(plan.amount.toString());
+                            setShowDataPlanDropdown(false);
+                          }}
+                        >
+                          <View>
+                            <ThemedText style={styles.providerOptionText}>
+                              {plan.name}
+                            </ThemedText>
+                            <ThemedText style={[styles.providerOptionText, { fontSize: 12, color: SparkColors.gold }]}>
+                              ₦{plan.amount.toLocaleString()}
+                            </ThemedText>
+                          </View>
+                        </TouchableOpacity>
+                      ))
+                    )}
                   </View>
                 )}
               </View>
