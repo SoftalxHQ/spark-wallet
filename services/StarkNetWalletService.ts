@@ -38,14 +38,15 @@ class StarkNetWalletService {
   private network: 'mainnet' | 'testnet' = 'testnet';
   private rpcUrl = 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8';
 
-  // OpenZeppelin account class hash (Sepolia testnet) - matches extension
-  private readonly ACCOUNT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f';
+  // Spark account class hash (Sepolia testnet) - matches extension
+  private readonly ACCOUNT_CLASS_HASH = '0x0320a6a6e7f7b7cbc6fd794a35754146bb4d0d5aef1d366842c1d59b813a8ec7';
 
   // Common token addresses on StarkNet Sepolia (official addresses)
   private readonly TOKEN_ADDRESSES = {
     STRK: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
     ETH: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
     USDC: '0x053b40a647cedfca6ca84f542a0fe36736031905a9639a7f19a3c1e66bfd5080', // Official USDC address from starknet-addresses repo
+    USDT: '0x02ab8758891e84b968ff11361789070c6b1af2df618d6d2f4a78b0757573c6eb', // Official USDT address from starknet-addresses repo
   };
 
   static getInstance(): StarkNetWalletService {
@@ -78,7 +79,7 @@ class StarkNetWalletService {
     return address;
   }
 
-  // Phase 1: Create a new smart wallet using OpenZeppelin account
+  // Phase 1: Create a new smart wallet using Spark account
   async createSmartWallet(): Promise<StarkNetWalletData> {
     try {
       console.log('Creating new StarkNet smart wallet...');
@@ -187,7 +188,8 @@ class StarkNetWalletService {
       const tokens = [
         { address: this.TOKEN_ADDRESSES.STRK, symbol: 'STRK', name: 'StarkNet Token', decimals: 18 },
         { address: this.TOKEN_ADDRESSES.ETH, symbol: 'ETH', name: 'Ethereum', decimals: 18 },
-        { address: this.TOKEN_ADDRESSES.USDC, symbol: 'USDC', name: 'USD Coin', decimals: 6 }
+        { address: this.TOKEN_ADDRESSES.USDC, symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+        { address: this.TOKEN_ADDRESSES.USDT, symbol: 'USDT', name: 'Tether', decimals: 6 }
       ];
 
       // Fetch balances for each token using multiple methods for debugging
@@ -511,6 +513,121 @@ class StarkNetWalletService {
     } catch (error) {
       console.error('Error formatting token amount:', error);
       return '0.0';
+    }
+  }
+
+  /**
+   * Process utility payment via Spark Payment Processor contract
+   */
+  async processUtilityPayment(
+    walletData: StarkNetWalletData,
+    amount: number,
+    utilityType: string,
+    transactionId: string
+  ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    try {
+      console.log('=== PROCESSING UTILITY PAYMENT ===');
+      console.log('Amount:', amount);
+      console.log('Utility Type:', utilityType);
+      console.log('Transaction ID:', transactionId);
+
+      // Create account instance
+      const account = new Account(this.provider, walletData.address, walletData.privateKey);
+
+      // Check if wallet is deployed
+      const isDeployed = await this.isWalletDeployed(walletData.address);
+      if (!isDeployed) {
+        console.log('Wallet not deployed, deploying first...');
+        const deployResult = await this.deployWallet(walletData);
+        if (!deployResult.success) {
+          return {
+            success: false,
+            error: `Failed to deploy wallet: ${deployResult.error}`
+          };
+        }
+      }
+
+      // Deployed Spark Payment Processor contract address (Sepolia testnet)
+      // Contract was deployed with STRK token address for testing
+      const processorAddress = '0x0532ce4a16d8efdc268766bb4a14c04cbb1b06b6f860faa60cfa99f6d8c2a950';
+      
+      console.log('=== SPARK PAYMENT PROCESSOR ===');
+      console.log('Processing STRK token payment for utility bill');
+      console.log(`Amount: ${amount} STRK`);
+      console.log(`Utility Type: 0x0${utilityType.toString()}`);
+      console.log(`Transaction ID: ${transactionId}`);
+      console.log(`Contract Address: ${processorAddress}`);
+      
+      // Check STRK balance before attempting payment
+      const balances = await this.getTokenBalances(walletData.address);
+      const strkToken = balances.find(token => token.symbol === 'STRK');
+      const strkBalance = strkToken?.balanceFormatted || '0';
+      console.log(`Current STRK balance: ${strkBalance}`);
+      console.log(`Required STRK amount: ${amount}`);
+      
+      if (parseFloat(strkBalance) < amount) {
+        return {
+          success: false,
+          error: `Insufficient STRK balance. Required: ${amount} STRK, Available: ${strkBalance} STRK. Please add STRK tokens to your wallet.`
+        };
+      }
+      
+      // Convert amount to uint256 format (STRK has 18 decimals)
+      const amountInWei = BigInt(Math.floor(amount * 1000000000000000000)); // 18 decimals for STRK
+      const amountUint256 = {
+        low: amountInWei & ((1n << 128n) - 1n),
+        high: amountInWei >> 128n
+      };
+
+      // First, approve the payment processor to spend our STRK tokens
+      const strkTokenAddress = this.TOKEN_ADDRESSES.STRK;
+      
+      // Approve payment processor to spend STRK tokens
+      const approveCalldata = CallData.compile({
+        spender: processorAddress,
+        amount: amountUint256
+      });
+
+      console.log('Approving STRK token spending...');
+      const approveResult = await account.execute({
+        contractAddress: strkTokenAddress,
+        entrypoint: 'approve',
+        calldata: approveCalldata
+      });
+
+      console.log('Approve transaction result:', approveResult);
+      await this.provider.waitForTransaction(approveResult.transaction_hash);
+
+      // Now execute the utility payment
+      const paymentCalldata = CallData.compile({
+        amount: amountUint256,
+        utility_type: utilityType,
+        transaction_id: transactionId
+      });
+
+      console.log('Payment calldata:', paymentCalldata);
+
+      // Execute utility payment transaction
+      const result = await account.execute({
+        contractAddress: processorAddress,
+        entrypoint: 'pay_utility',
+        calldata: paymentCalldata
+      });
+
+      console.log('Payment transaction result:', result);
+      await this.provider.waitForTransaction(result.transaction_hash);
+
+      return {
+        success: true,
+        transactionHash: result.transaction_hash
+      };
+
+    } catch (error) {
+      console.error('Utility payment error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
     }
   }
 }

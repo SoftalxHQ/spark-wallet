@@ -45,7 +45,11 @@
       "router": {},
       "eas": {
         "projectId": "86c286a8-a6d2-4532-a74f-920af9d7cb0b"
-      }
+      },
+      "VTPASS_SANDBOX_API_KEY": "796ac22be1730aad69e0891ab1828cdc",
+      "VTPASS_SANDBOX_PUBLIC_KEY": "PK_364a599ebfa7aed59a960577a4b83ccb23517ed016b",
+      "VTPASS_SANDBOX_SECRET_KEY": "SK_47265cb52d4420d58ecd0500fa24cb346a8298ab3e2",
+      "EXCHANGE_RATE_API_KEY": "46585dcf8276a8a2b2c5b576"
     },
     "owner": "softalx-solutions"
   }

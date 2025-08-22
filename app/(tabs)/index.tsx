@@ -52,6 +52,7 @@ export default function HomeScreen() {
       case 'STRK': return require('@/assets/images/strk.png');
       case 'ETH': return require('@/assets/images/eth.png');
       case 'USDC': return require('@/assets/images/usdc.png');
+      case 'USDT': return require('@/assets/images/usdt.png');
       default: return require('@/assets/images/strk.png');
     }
   };
@@ -80,6 +81,15 @@ export default function HomeScreen() {
       symbol: 'USDC',
       name: 'USD Coin',
       address: '0x053b40a647cedfca6ca84f542a0fe36736031905a9639a7f19a3c1e66bfd5080',
+      decimals: 6,
+      balance: '0',
+      balanceFormatted: '0.000000',
+      usdValue: '0.00'
+    },
+    {
+      symbol: 'USDT',
+      name: 'Tether',
+      address: '0x02ab8758891e84b968ff11361789070c6b1af2df618d6d2f4a78b0757573c6eb',
       decimals: 6,
       balance: '0',
       balanceFormatted: '0.000000',
