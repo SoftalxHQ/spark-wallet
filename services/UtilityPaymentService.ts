@@ -8,6 +8,7 @@ import VTpassService, { VTpassConfig, VTPASS_SERVICES } from './VTpassService';
 import VTpassConfigManager from './VTpassConfig';
 import StarkNetWalletService from './StarkNetWalletService';
 import { CurrencyService } from './CurrencyService';
+import NetworkConfigService from './NetworkConfigService';
 
 export interface UtilityPaymentRequest {
   type: 'electricity' | 'airtime' | 'data' | 'tv';
@@ -30,8 +31,11 @@ export interface UtilityPaymentResult {
   receipt?: {
     service: string;
     amount: number; // NGN amount
-    usdcAmount?: number; // USDC amount deducted
+    usdcAmount?: number; // USDC amount deducted (mainnet)
+    strkAmount?: number; // STRK amount deducted (sepolia)
     exchangeRate?: number; // USD to NGN rate
+    paymentToken?: string; // Which token was used for payment
+    network?: string; // Which network was used
     accountNumber: string;
     transactionDate: string;
     status: string;
@@ -90,28 +94,46 @@ class UtilityPaymentService {
         console.log(`VTpass: Skipping verification for ${request.type} - not required`);
       }
 
-      // Step 3: Convert NGN amount to USDC tokens
+      // Step 3: Get network-specific payment token and convert NGN amount
+      const currentNetwork = NetworkConfigService.getCurrentNetwork();
       const currencyService = CurrencyService.getInstance();
-      const conversion = await currencyService.convertNgnToUsdc(request.amount);
-      console.log(`Currency conversion: ₦${request.amount} = ${conversion.usdcAmount} USDC`);
+      
+      let conversion: any;
+      let paymentToken: string;
+      
+      if (currentNetwork === 'sepolia') {
+        // Use STRK on Sepolia testnet
+        conversion = await currencyService.convertNgnToStrk(request.amount);
+        paymentToken = 'STRK';
+        console.log(`Currency conversion (Sepolia): ₦${request.amount} = ${conversion.strkAmount} STRK`);
+      } else {
+        // Use USDC on Mainnet
+        conversion = await currencyService.convertNgnToUsdc(request.amount);
+        paymentToken = 'USDC';
+        console.log(`Currency conversion (Mainnet): ₦${request.amount} = ${conversion.usdcAmount} USDC`);
+      }
 
-      // Step 4: Process USDC payment via Spark Payment Processor
+      // Step 4: Process payment via Spark Payment Processor with network-specific token
       const requestId = VTpassService.generateRequestId();
+      const tokenAmount = currentNetwork === 'sepolia' ? conversion.strkAmount : conversion.usdcAmount;
       const paymentResult = await StarkNetWalletService.processUtilityPayment(
         walletData,
-        conversion.usdcAmount, // Use USDC amount instead of NGN
+        tokenAmount,
         this.getUtilityTypeCode(request.type),
-        requestId
+        requestId,
+        paymentToken // Pass the payment token type
       );
 
       if (!paymentResult.success) {
-        throw new Error(`USDC payment failed: ${paymentResult.error}`);
+        throw new Error(`${paymentToken} payment failed: ${paymentResult.error}`);
       }
 
       // Step 5: Fulfill service via VTpass API
       const vtpassResult = await this.fulfillVTpassService(request, requestId);
 
       // Step 5: Return combined result
+      const tokenAmountKey = currentNetwork === 'sepolia' ? 'strkAmount' : 'usdcAmount';
+      
       return {
         success: true,
         transactionHash: paymentResult.transactionHash,
@@ -120,8 +142,10 @@ class UtilityPaymentService {
         receipt: {
           service: `${request.type.toUpperCase()} - ${request.serviceProvider}`,
           amount: request.amount, // NGN amount
-          usdcAmount: conversion.usdcAmount, // USDC amount deducted
+          [tokenAmountKey]: tokenAmount, // Network-specific token amount deducted
           exchangeRate: conversion.exchangeRate, // USD to NGN rate
+          paymentToken: paymentToken, // Which token was used for payment
+          network: currentNetwork, // Which network was used
           accountNumber: request.accountNumber,
           transactionDate: new Date().toISOString(),
           status: 'completed',

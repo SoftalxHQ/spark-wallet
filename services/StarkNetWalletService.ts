@@ -519,7 +519,8 @@ class StarkNetWalletService {
     walletData: StarkNetWalletData,
     amount: number,
     utilityType: string,
-    transactionId: string
+    transactionId: string,
+    paymentToken?: string
   ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
     try {
       console.log('=== PROCESSING UTILITY PAYMENT ===');
@@ -543,50 +544,55 @@ class StarkNetWalletService {
         }
       }
 
-      // Deployed Spark Payment Processor contract address (Sepolia testnet)
-      // Contract was deployed with USDC token address for testing
-      const processorAddress = '0x0532ce4a16d8efdc268766bb4a14c04cbb1b06b6f860faa60cfa99f6d8c2a950';
+      // Get network-specific configuration
+      const currentNetwork = NetworkConfigService.getCurrentNetwork();
+      const tokenToUse = paymentToken || (currentNetwork === 'sepolia' ? 'STRK' : 'USDC');
+      
+      // Use network-specific payment processor contract address
+      const processorAddress = NetworkConfigService.getContractAddresses().paymentProcessor;
       
       console.log('=== SPARK PAYMENT PROCESSOR ===');
-      console.log('Processing USDC token payment for utility bill');
-      console.log(`Amount: ${amount} USDC`);
-      console.log(`Utility Type: 0x0${utilityType.toString()}`);
+      console.log(`Processing ${tokenToUse} token payment for utility bill on ${currentNetwork}`);
+      console.log(`Amount: ${amount} ${tokenToUse}`);
+      console.log(`Utility Type: ${utilityType}`);
       console.log(`Transaction ID: ${transactionId}`);
       console.log(`Contract Address: ${processorAddress}`);
       
-      // Check USDC balance before attempting payment
+      // Check token balance before attempting payment
       const balances = await this.getTokenBalances(walletData.address);
-      const usdcToken = balances.find(token => token.symbol === 'USDC');
-      const usdcBalance = usdcToken?.balanceFormatted || '0';
-      console.log(`Current USDC balance: ${usdcBalance}`);
-      console.log(`Required USDC amount: ${amount}`);
+      const paymentTokenBalance = balances.find(token => token.symbol === tokenToUse);
+      const tokenBalance = paymentTokenBalance?.balanceFormatted || '0';
+      console.log(`Current ${tokenToUse} balance: ${tokenBalance}`);
+      console.log(`Required ${tokenToUse} amount: ${amount}`);
       
-      if (parseFloat(usdcBalance) < amount) {
+      if (parseFloat(tokenBalance) < amount) {
         return {
           success: false,
-          error: `Insufficient USDC balance. Required: ${amount} USDC, Available: ${usdcBalance} USDC. Please add USDC tokens to your wallet.`
+          error: `Insufficient ${tokenToUse} balance. Required: ${amount} ${tokenToUse}, Available: ${tokenBalance} ${tokenToUse}. Please add ${tokenToUse} tokens to your wallet.`
         };
       }
       
-      // Convert amount to uint256 format (USDC has 6 decimals)
-      const amountInMicroUnits = BigInt(Math.floor(amount * 1000000)); // 6 decimals for USDC
+      // Convert amount to uint256 format (STRK has 18 decimals, USDC has 6 decimals)
+      const decimals = tokenToUse === 'STRK' ? 18 : 6;
+      const amountInUnits = BigInt(Math.floor(amount * Math.pow(10, decimals)));
       const amountUint256 = {
-        low: amountInMicroUnits & ((1n << 128n) - 1n),
-        high: amountInMicroUnits >> 128n
+        low: amountInUnits & ((1n << 128n) - 1n),
+        high: amountInUnits >> 128n
       };
 
-      // First, approve the payment processor to spend our USDC tokens
-      const usdcTokenAddress = NetworkConfigService.getTokenAddresses().USDC;
+      // Get the token address for the payment token
+      const tokenAddresses = NetworkConfigService.getTokenAddresses();
+      const paymentTokenAddress = tokenAddresses[tokenToUse as keyof typeof tokenAddresses];
       
-      // Approve payment processor to spend USDC tokens
+      // Approve payment processor to spend tokens
       const approveCalldata = CallData.compile({
         spender: processorAddress,
         amount: amountUint256
       });
 
-      console.log('Approving USDC token spending...');
+      console.log(`Approving ${tokenToUse} token spending...`);
       const approveResult = await account.execute({
-        contractAddress: usdcTokenAddress,
+        contractAddress: paymentTokenAddress,
         entrypoint: 'approve',
         calldata: approveCalldata
       });
@@ -602,6 +608,7 @@ class StarkNetWalletService {
       });
 
       console.log('Payment calldata:', paymentCalldata);
+      console.log('Transaction ID:', transactionId);
 
       // Execute utility payment transaction
       const result = await account.execute({

@@ -21,6 +21,7 @@ export interface NetworkConfig {
   };
   contracts: {
     autoswapper: string;
+    paymentProcessor: string;
   };
   accountClassHash: string;
 }
@@ -48,6 +49,7 @@ class NetworkConfigService {
       },
       contracts: {
         autoswapper: '0x05582ad635c43b4c14dbfa53cbde0df32266164a0d1b36e5b510e5b34aeb364b', // Update with mainnet address
+        paymentProcessor: '0x06848807ce1d90563c92a79605fa583b984971e297e8fe49fd159aa120373d08', // Mainnet payment processor
       },
       accountClassHash: '0x0320a6a6e7f7b7cbc6fd794a35754146bb4d0d5aef1d366842c1d59b813a8ec7' // Mainnet account class hash
     },
@@ -65,6 +67,7 @@ class NetworkConfigService {
       },
       contracts: {
         autoswapper: '0x05582ad635c43b4c14dbfa53cbde0df32266164a0d1b36e5b510e5b34aeb364b',
+        paymentProcessor: '0x0532ce4a16d8efdc268766bb4a14c04cbb1b06b6f860faa60cfa99f6d8c2a950', // Sepolia payment processor
       },
       accountClassHash: '0x0320a6a6e7f7b7cbc6fd794a35754146bb4d0d5aef1d366842c1d59b813a8ec7' // Sepolia account class hash
     }

@@ -738,20 +738,6 @@ export default function UtilityScreen() {
               </View>
             )}
 
-            {/* Customer Phone (not required for electricity) */}
-            {selectedUtility !== 'electricity' && (
-              <View style={styles.inputSection}>
-                <ThemedText style={styles.inputLabel}>Customer Phone</ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  value={customerPhone}
-                  onChangeText={setCustomerPhone}
-                  placeholder="Enter customer phone number"
-                  placeholderTextColor={SparkColors.darkGray}
-                  keyboardType="phone-pad"
-                />
-              </View>
-            )}
             
             {/* Customer Details */}
             {customerDetails && (

@@ -702,8 +702,8 @@ class VTpassService {
    * Generate unique request ID for transactions
    */
   static generateRequestId(): string {
-    // Africa/Lagos timezone (GMT+1)
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
+    // Use current UTC time to avoid timezone conversion issues
+    const now = new Date();
 
     // Extract components with zero padding
     const year   = now.getFullYear();
@@ -711,12 +711,13 @@ class VTpassService {
     const day    = String(now.getDate()).padStart(2, "0");
     const hour   = String(now.getHours()).padStart(2, "0");
     const minute = String(now.getMinutes()).padStart(2, "0");
+    const second = String(now.getSeconds()).padStart(2, "0");
 
-    // Build base (first 12 characters)
-    const base = `${year}${month}${day}${hour}${minute}`;
+    // Build base timestamp
+    const base = `${year}${month}${day}${hour}${minute}${second}`;
 
     // Append random alphanumeric suffix
-    const random = Math.random().toString(36).substring(2, 10); // 8 chars
+    const random = Math.random().toString(36).substring(2, 8); // 6 chars
 
     return `${base}${random}`;
   }
