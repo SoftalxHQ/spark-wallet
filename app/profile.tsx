@@ -1,17 +1,37 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useState, useEffect } from 'react';
 
 import { ThemedText } from '@/components/ThemedText';
 import { SparkColors } from '@/constants/Colors';
+import NetworkSelector from '@/components/NetworkSelector';
+import NetworkConfigService, { NetworkType } from '@/services/NetworkConfigService';
+import AutoSwapperService from '@/services/AutoSwapperService';
+import StarkNetWalletService from '@/services/StarkNetWalletService';
 
 export default function ProfileScreen() {
+  const [currentNetwork, setCurrentNetwork] = useState<NetworkType>('mainnet');
+
+  useEffect(() => {
+    // Load current network on component mount
+    const network = NetworkConfigService.getCurrentNetwork();
+    setCurrentNetwork(network);
+  }, []);
+
+  const handleNetworkChange = (network: NetworkType) => {
+    setCurrentNetwork(network);
+    
+    // Refresh services to use new network configuration
+    AutoSwapperService.refreshNetworkConfig();
+    StarkNetWalletService.refreshNetworkConfig();
+  };
+
   const profileSections = [
     {
       title: 'Account',
       items: [
         { name: 'Wallet Address', value: '0x1234...5678', icon: '🔗' },
         { name: 'Email', value: 'user@example.com', icon: '📧' },
-        { name: 'Network', value: 'StarkNet Mainnet', icon: '🌐' },
       ]
     },
     {
@@ -40,12 +60,20 @@ export default function ProfileScreen() {
       end={{ x: 1, y: 1 }}
     >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        
+
         <View style={styles.header}>
           <View style={styles.profileAvatar}>
             <ThemedText style={styles.avatarText}>👤</ThemedText>
           </View>
           <ThemedText type="title" style={styles.userName}>John Doe</ThemedText>
           <ThemedText style={styles.userEmail}>user@example.com</ThemedText>
+        </View>
+
+        {/* Network Selector Section */}
+        <View style={styles.section}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>Network</ThemedText>
+          <NetworkSelector onNetworkChange={handleNetworkChange} />
         </View>
 
         {profileSections.map((section, sectionIndex) => (
@@ -69,6 +97,8 @@ export default function ProfileScreen() {
             </View>
           </View>
         ))}
+
+        
 
         <TouchableOpacity style={styles.logoutButton}>
           <ThemedText style={styles.logoutText}>Log Out</ThemedText>

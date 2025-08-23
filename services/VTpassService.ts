@@ -702,10 +702,25 @@ class VTpassService {
    * Generate unique request ID for transactions
    */
   static generateRequestId(): string {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000);
-    return `SPARK_${timestamp}_${random}`;
+    // Africa/Lagos timezone (GMT+1)
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
+
+    // Extract components with zero padding
+    const year   = now.getFullYear();
+    const month  = String(now.getMonth() + 1).padStart(2, "0");
+    const day    = String(now.getDate()).padStart(2, "0");
+    const hour   = String(now.getHours()).padStart(2, "0");
+    const minute = String(now.getMinutes()).padStart(2, "0");
+
+    // Build base (first 12 characters)
+    const base = `${year}${month}${day}${hour}${minute}`;
+
+    // Append random alphanumeric suffix
+    const random = Math.random().toString(36).substring(2, 10); // 8 chars
+
+    return `${base}${random}`;
   }
+
 
   /**
    * Validate Nigerian phone number

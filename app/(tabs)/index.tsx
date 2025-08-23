@@ -13,6 +13,7 @@ import { SparkColors } from '@/constants/Colors';
 import WalletQRCode from '../../components/WalletQRCode';
 import StarkNetWalletService, { TokenBalance } from '../../services/StarkNetWalletService';
 import StorageService from '../../services/StorageService';
+import NetworkConfigService from '../../services/NetworkConfigService';
 
 export default function HomeScreen() {
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
@@ -113,6 +114,11 @@ export default function HomeScreen() {
   const loadWalletData = async () => {
     try {
       setIsLoading(true);
+      
+      // Initialize network configuration first
+      console.log('Initializing network configuration...');
+      await NetworkConfigService.initialize();
+      console.log('Network configuration initialized:', NetworkConfigService.getCurrentNetwork());
       
       // Debug storage state
       const storageInfo = await StorageService.getStorageInfo();

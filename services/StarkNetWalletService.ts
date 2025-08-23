@@ -8,6 +8,7 @@ import 'react-native-get-random-values';
 import { Account, CallData, RpcProvider, cairo, ec, hash, stark } from 'starknet';
 import priceService from './PriceService';
 import StorageService from './StorageService';
+import NetworkConfigService from './NetworkConfigService';
 
 export interface StarkNetWalletData {
   address: string;
@@ -35,19 +36,8 @@ export interface TransactionResult {
 class StarkNetWalletService {
   private static instance: StarkNetWalletService;
   private provider!: RpcProvider;
-  private network: 'mainnet' | 'testnet' = 'testnet';
-  private rpcUrl = 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8';
 
-  // Spark account class hash (Sepolia testnet) - matches extension
-  private readonly ACCOUNT_CLASS_HASH = '0x0320a6a6e7f7b7cbc6fd794a35754146bb4d0d5aef1d366842c1d59b813a8ec7';
-
-  // Common token addresses on StarkNet Sepolia (official addresses)
-  private readonly TOKEN_ADDRESSES = {
-    STRK: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
-    ETH: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
-    USDC: '0x053b40a647cedfca6ca84f542a0fe36736031905a9639a7f19a3c1e66bfd5080', // Official USDC address from starknet-addresses repo
-    USDT: '0x02ab8758891e84b968ff11361789070c6b1af2df618d6d2f4a78b0757573c6eb', // Official USDT address from starknet-addresses repo
-  };
+  // Account class hash will be loaded from NetworkConfigService
 
   static getInstance(): StarkNetWalletService {
     if (!StarkNetWalletService.instance) {
@@ -60,11 +50,11 @@ class StarkNetWalletService {
     this.initializeProvider();
   }
 
-  private initializeProvider(): void {
-    this.provider = new RpcProvider({
-      nodeUrl: this.rpcUrl
-    });
-    console.log('StarkNet provider initialized with:', this.rpcUrl);
+  private initializeProvider() {
+    const rpcUrl = NetworkConfigService.getRpcUrl();
+    console.log(`Initializing StarkNet provider with RPC: ${rpcUrl}`);
+    this.provider = new RpcProvider({ nodeUrl: rpcUrl });
+    console.log('StarkNet provider initialized with:', rpcUrl);
   }
 
   // Ensure proper address formatting (matches extension implementation)
@@ -97,12 +87,13 @@ class StarkNetWalletService {
       console.log('Constructor calldata:', constructorCalldata);
       
       console.log('Step 4: Calculating contract address...');
-      console.log('Using account class hash:', this.ACCOUNT_CLASS_HASH);
+      const accountClassHash = NetworkConfigService.getAccountClassHash();
+      console.log('Using account class hash:', accountClassHash);
       console.log('Using salt (public key):', publicKey);
       
       const rawAddress = hash.calculateContractAddressFromHash(
         publicKey, // salt
-        this.ACCOUNT_CLASS_HASH,
+        accountClassHash,
         constructorCalldata,
         0 // deployer address
       );
@@ -145,8 +136,9 @@ class StarkNetWalletService {
       const account = new Account(this.provider, walletData.address, walletData.privateKey);
       
       // Deploy account contract
+      const accountClassHash = NetworkConfigService.getAccountClassHash();
       const deployAccountPayload = {
-        classHash: this.ACCOUNT_CLASS_HASH,
+        classHash: accountClassHash,
         constructorCalldata: CallData.compile([walletData.publicKey]),
         contractAddress: walletData.address,
         addressSalt: walletData.salt
@@ -180,17 +172,12 @@ class StarkNetWalletService {
       console.log('=== BALANCE FETCHING DEBUG ===');
       console.log('Fetching token balances for:', walletAddress);
       console.log('Using RPC endpoint:', this.provider.channel.nodeUrl);
-      console.log('Network:', this.network);
+      console.log('Network:', NetworkConfigService.getCurrentNetwork());
       
       const balances: TokenBalance[] = [];
 
-      // Token configurations
-      const tokens = [
-        { address: this.TOKEN_ADDRESSES.STRK, symbol: 'STRK', name: 'StarkNet Token', decimals: 18 },
-        { address: this.TOKEN_ADDRESSES.ETH, symbol: 'ETH', name: 'Ethereum', decimals: 18 },
-        { address: this.TOKEN_ADDRESSES.USDC, symbol: 'USDC', name: 'USD Coin', decimals: 6 },
-        { address: this.TOKEN_ADDRESSES.USDT, symbol: 'USDT', name: 'Tether', decimals: 6 }
-      ];
+      // Token configurations from NetworkConfigService
+      const tokens = NetworkConfigService.getSupportedTokens();
 
       // Fetch balances for each token using multiple methods for debugging
       for (const token of tokens) {
@@ -296,9 +283,11 @@ class StarkNetWalletService {
     decimals: number
   ): Promise<string> {
     try {
-      const provider = new RpcProvider({
-        nodeUrl: 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
-      });
+      // Use network-specific RPC endpoint
+      const rpcUrl = NetworkConfigService.getRpcUrl();
+      const provider = new RpcProvider({ nodeUrl: rpcUrl });
+      
+      console.log(`Estimating gas using ${NetworkConfigService.getCurrentNetwork()} network: ${rpcUrl}`);
 
       // Get wallet data to use real private key
       const walletData = await StorageService.getWalletData();
@@ -475,15 +464,22 @@ class StarkNetWalletService {
   }
 
   // Switch network
-  setNetwork(network: 'mainnet' | 'testnet'): void {
-    this.network = network;
+  async switchNetwork(network: 'mainnet' | 'sepolia') {
+    await NetworkConfigService.switchNetwork(network);
     this.initializeProvider();
     console.log('Switched to', network);
   }
 
   // Get current network
-  getNetwork(): 'mainnet' | 'testnet' {
-    return this.network;
+  getNetwork(): 'mainnet' | 'sepolia' {
+    return NetworkConfigService.getCurrentNetwork();
+  }
+
+  /**
+   * Refresh network configuration (call when network changes)
+   */
+  refreshNetworkConfig() {
+    this.initializeProvider();
   }
 
   // Helper method to format token amounts
@@ -580,7 +576,7 @@ class StarkNetWalletService {
       };
 
       // First, approve the payment processor to spend our USDC tokens
-      const usdcTokenAddress = this.TOKEN_ADDRESSES.USDC;
+      const usdcTokenAddress = NetworkConfigService.getTokenAddresses().USDC;
       
       // Approve payment processor to spend USDC tokens
       const approveCalldata = CallData.compile({
