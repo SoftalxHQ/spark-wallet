@@ -548,49 +548,49 @@ class StarkNetWalletService {
       }
 
       // Deployed Spark Payment Processor contract address (Sepolia testnet)
-      // Contract was deployed with STRK token address for testing
+      // Contract was deployed with USDC token address for testing
       const processorAddress = '0x0532ce4a16d8efdc268766bb4a14c04cbb1b06b6f860faa60cfa99f6d8c2a950';
       
       console.log('=== SPARK PAYMENT PROCESSOR ===');
-      console.log('Processing STRK token payment for utility bill');
-      console.log(`Amount: ${amount} STRK`);
+      console.log('Processing USDC token payment for utility bill');
+      console.log(`Amount: ${amount} USDC`);
       console.log(`Utility Type: 0x0${utilityType.toString()}`);
       console.log(`Transaction ID: ${transactionId}`);
       console.log(`Contract Address: ${processorAddress}`);
       
-      // Check STRK balance before attempting payment
+      // Check USDC balance before attempting payment
       const balances = await this.getTokenBalances(walletData.address);
-      const strkToken = balances.find(token => token.symbol === 'STRK');
-      const strkBalance = strkToken?.balanceFormatted || '0';
-      console.log(`Current STRK balance: ${strkBalance}`);
-      console.log(`Required STRK amount: ${amount}`);
+      const usdcToken = balances.find(token => token.symbol === 'USDC');
+      const usdcBalance = usdcToken?.balanceFormatted || '0';
+      console.log(`Current USDC balance: ${usdcBalance}`);
+      console.log(`Required USDC amount: ${amount}`);
       
-      if (parseFloat(strkBalance) < amount) {
+      if (parseFloat(usdcBalance) < amount) {
         return {
           success: false,
-          error: `Insufficient STRK balance. Required: ${amount} STRK, Available: ${strkBalance} STRK. Please add STRK tokens to your wallet.`
+          error: `Insufficient USDC balance. Required: ${amount} USDC, Available: ${usdcBalance} USDC. Please add USDC tokens to your wallet.`
         };
       }
       
-      // Convert amount to uint256 format (STRK has 18 decimals)
-      const amountInWei = BigInt(Math.floor(amount * 1000000000000000000)); // 18 decimals for STRK
+      // Convert amount to uint256 format (USDC has 6 decimals)
+      const amountInMicroUnits = BigInt(Math.floor(amount * 1000000)); // 6 decimals for USDC
       const amountUint256 = {
-        low: amountInWei & ((1n << 128n) - 1n),
-        high: amountInWei >> 128n
+        low: amountInMicroUnits & ((1n << 128n) - 1n),
+        high: amountInMicroUnits >> 128n
       };
 
-      // First, approve the payment processor to spend our STRK tokens
-      const strkTokenAddress = this.TOKEN_ADDRESSES.STRK;
+      // First, approve the payment processor to spend our USDC tokens
+      const usdcTokenAddress = this.TOKEN_ADDRESSES.USDC;
       
-      // Approve payment processor to spend STRK tokens
+      // Approve payment processor to spend USDC tokens
       const approveCalldata = CallData.compile({
         spender: processorAddress,
         amount: amountUint256
       });
 
-      console.log('Approving STRK token spending...');
+      console.log('Approving USDC token spending...');
       const approveResult = await account.execute({
-        contractAddress: strkTokenAddress,
+        contractAddress: usdcTokenAddress,
         entrypoint: 'approve',
         calldata: approveCalldata
       });

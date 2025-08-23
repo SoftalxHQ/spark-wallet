@@ -1,5 +1,5 @@
 /**
- * Currency conversion service for NGN to USD rates and STRK token pricing
+ * Currency conversion service for NGN to USD rates and USDC token pricing
  */
 
 import Constants from 'expo-constants';
@@ -183,12 +183,48 @@ export class CurrencyService {
   }
 
   /**
+   * Convert NGN amount to equivalent USDC tokens
+   * Flow: NGN -> USD -> USDC (1:1 ratio)
+   */
+  async convertNgnToUsdc(ngnAmount: number): Promise<{
+    usdcAmount: number;
+    usdAmount: number;
+    exchangeRate: number;
+  }> {
+    try {
+      console.log(`Currency: Converting ₦${ngnAmount} to USDC tokens`);
+      
+      // Get current exchange rate
+      const usdToNgnRate = await this.getUsdToNgnRate();
+
+      // Convert NGN to USD
+      const usdAmount = ngnAmount / usdToNgnRate;
+      
+      // USDC is pegged 1:1 to USD
+      const usdcAmount = usdAmount;
+
+      const result = {
+        usdcAmount: parseFloat(usdcAmount.toFixed(6)), // 6 decimal places for precision
+        usdAmount: parseFloat(usdAmount.toFixed(2)),
+        exchangeRate: usdToNgnRate
+      };
+
+      console.log(`Currency conversion result:`, result);
+      return result;
+      
+    } catch (error) {
+      console.error('Currency: Conversion error:', error);
+      throw new Error(`Failed to convert NGN to USDC: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Get formatted conversion display for UI
    */
   async getConversionDisplay(ngnAmount: number): Promise<string> {
     try {
-      const conversion = await this.convertNgnToStrk(ngnAmount);
-      return `₦${ngnAmount.toLocaleString()} ≈ $${conversion.usdAmount} ≈ ${conversion.strkAmount} STRK`;
+      const conversion = await this.convertNgnToUsdc(ngnAmount);
+      return `₦${ngnAmount.toLocaleString()} ≈ $${conversion.usdAmount} ≈ ${conversion.usdcAmount} USDC`;
     } catch {
       return `₦${ngnAmount.toLocaleString()} (conversion unavailable)`;
     }

@@ -242,10 +242,6 @@ export default function UtilityPaymentSuccessModal({
                     receiptText += `🔑 Token: ${paymentDetails.token}\n`;
                   }
                   
-                  if (paymentDetails.tokenValue) {
-                    receiptText += `💎 Token Value: ₦${paymentDetails.tokenValue}\n`;
-                  }
-                  
                   if (paymentDetails.units) {
                     receiptText += `⚡ Units: ${paymentDetails.units}\n`;
                   }

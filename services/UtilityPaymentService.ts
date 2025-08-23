@@ -30,9 +30,8 @@ export interface UtilityPaymentResult {
   receipt?: {
     service: string;
     amount: number; // NGN amount
-    strkAmount?: number; // STRK amount deducted
+    usdcAmount?: number; // USDC amount deducted
     exchangeRate?: number; // USD to NGN rate
-    strkPrice?: number; // STRK to USD rate
     accountNumber: string;
     transactionDate: string;
     status: string;
@@ -91,22 +90,22 @@ class UtilityPaymentService {
         console.log(`VTpass: Skipping verification for ${request.type} - not required`);
       }
 
-      // Step 3: Convert NGN amount to STRK tokens
+      // Step 3: Convert NGN amount to USDC tokens
       const currencyService = CurrencyService.getInstance();
-      const conversion = await currencyService.convertNgnToStrk(request.amount);
-      console.log(`Currency conversion: ₦${request.amount} = ${conversion.strkAmount} STRK`);
+      const conversion = await currencyService.convertNgnToUsdc(request.amount);
+      console.log(`Currency conversion: ₦${request.amount} = ${conversion.usdcAmount} USDC`);
 
-      // Step 4: Process STRK payment via Spark Payment Processor
+      // Step 4: Process USDC payment via Spark Payment Processor
       const requestId = VTpassService.generateRequestId();
       const paymentResult = await StarkNetWalletService.processUtilityPayment(
         walletData,
-        conversion.strkAmount, // Use STRK amount instead of NGN
+        conversion.usdcAmount, // Use USDC amount instead of NGN
         this.getUtilityTypeCode(request.type),
         requestId
       );
 
       if (!paymentResult.success) {
-        throw new Error(`STRK payment failed: ${paymentResult.error}`);
+        throw new Error(`USDC payment failed: ${paymentResult.error}`);
       }
 
       // Step 5: Fulfill service via VTpass API
@@ -121,9 +120,8 @@ class UtilityPaymentService {
         receipt: {
           service: `${request.type.toUpperCase()} - ${request.serviceProvider}`,
           amount: request.amount, // NGN amount
-          strkAmount: conversion.strkAmount, // STRK amount deducted
+          usdcAmount: conversion.usdcAmount, // USDC amount deducted
           exchangeRate: conversion.exchangeRate, // USD to NGN rate
-          strkPrice: conversion.strkPrice, // STRK to USD rate
           accountNumber: request.accountNumber,
           transactionDate: new Date().toISOString(),
           status: 'completed',
