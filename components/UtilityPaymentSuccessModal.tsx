@@ -1,8 +1,8 @@
-import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SparkColors } from '@/constants/Colors';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { IconSymbol } from './ui/IconSymbol';
+import { SparkColors } from '../constants/Colors';
 
 interface UtilityPaymentSuccessModalProps {
   visible: boolean;
@@ -15,6 +15,8 @@ interface UtilityPaymentSuccessModalProps {
     transactionHash: string;
     token?: string;
     customerName?: string;
+    tokenValue?: string;
+    units?: string;
   };
 }
 
@@ -23,6 +25,7 @@ export default function UtilityPaymentSuccessModal({
   onClose, 
   paymentDetails 
 }: UtilityPaymentSuccessModalProps) {
+  const [isSharing, setIsSharing] = useState(false);
   
   const getUtilityIcon = (type: string) => {
     switch (type) {
@@ -77,7 +80,8 @@ export default function UtilityPaymentSuccessModal({
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.receiptContainer}>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View style={styles.header}>
             <View style={[styles.successIcon, { backgroundColor: getUtilityColor(paymentDetails.utilityType) }]}>
@@ -128,6 +132,13 @@ export default function UtilityPaymentSuccessModal({
                 <Text style={[styles.detailValue, styles.tokenText]}>{paymentDetails.token}</Text>
               </View>
             )}
+
+            {paymentDetails.units && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Units</Text>
+                <Text style={styles.detailValue}>{paymentDetails.units} kWh</Text>
+              </View>
+            )}
           </View>
 
           {/* Transaction Hash */}
@@ -144,9 +155,13 @@ export default function UtilityPaymentSuccessModal({
             </View>
             <TouchableOpacity 
               style={styles.viewOnExplorerButton}
-              onPress={() => {
-                // TODO: Open transaction in StarkNet explorer
-                console.log('View on explorer:', paymentDetails.transactionHash);
+              onPress={async () => {
+                const explorerUrl = `https://sepolia.voyager.online/tx/${paymentDetails.transactionHash}`;
+                try {
+                  await Linking.openURL(explorerUrl);
+                } catch (error) {
+                  console.error('Failed to open URL:', error);
+                }
               }}
             >
               <IconSymbol name="chevron.right" size={16} color={SparkColors.black} />
@@ -194,10 +209,61 @@ export default function UtilityPaymentSuccessModal({
 
           {/* Action Buttons */}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => {
-              // TODO: Share transaction details
-              console.log('Share transaction');
-            }}>
+            <TouchableOpacity 
+              style={[styles.secondaryButton, isSharing && styles.disabledButton]} 
+              disabled={isSharing}
+              onPress={async () => {
+                if (isSharing) return;
+                
+                setIsSharing(true);
+                try {
+                  // Share formatted text receipt
+                  const formatUtilityType = (type: string) => {
+                    switch (type) {
+                      case 'electricity': return 'Electricity';
+                      case 'airtime': return 'Airtime';
+                      case 'data': return 'Data';
+                      case 'tv': return 'TV Subscription';
+                      default: return type.charAt(0).toUpperCase() + type.slice(1);
+                    }
+                  };
+
+                  let receiptText = `🧾 SPARK WALLET RECEIPT\n\n`;
+                  receiptText += `💡 Service: ${formatUtilityType(paymentDetails.utilityType)}\n`;
+                  receiptText += `🏢 Provider: ${paymentDetails.provider}\n`;
+                  receiptText += `💰 Amount: ₦${paymentDetails.amount.toLocaleString()}\n`;
+                  receiptText += `📱 Account: ${paymentDetails.accountNumber}\n`;
+                  
+                  if (paymentDetails.customerName) {
+                    receiptText += `👤 Customer: ${paymentDetails.customerName}\n`;
+                  }
+                  
+                  if (paymentDetails.token) {
+                    receiptText += `🔑 Token: ${paymentDetails.token}\n`;
+                  }
+                  
+                  if (paymentDetails.tokenValue) {
+                    receiptText += `💎 Token Value: ₦${paymentDetails.tokenValue}\n`;
+                  }
+                  
+                  if (paymentDetails.units) {
+                    receiptText += `⚡ Units: ${paymentDetails.units}\n`;
+                  }
+                  
+                  receiptText += `\n🔗 Transaction Hash:\n${paymentDetails.transactionHash}\n`;
+                  receiptText += `\n🌐 View on Explorer:\nhttps://sepolia.voyager.online/tx/${paymentDetails.transactionHash}\n`;
+                  receiptText += `\n✅ Powered by Spark Wallet on StarkNet`;
+
+                  await Share.share({
+                    message: receiptText,
+                    title: 'Payment Receipt - Spark Wallet'
+                  });
+                } catch (shareError) {
+                  console.error('Share error:', shareError);
+                } finally {
+                  setIsSharing(false);
+                }
+              }}>
               <IconSymbol name="paperplane.fill" size={16} color={SparkColors.white} />
               <Text style={styles.secondaryButtonText}>Share Receipt</Text>
             </TouchableOpacity>
@@ -206,7 +272,8 @@ export default function UtilityPaymentSuccessModal({
               <Text style={styles.primaryButtonText}>Done</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
       </LinearGradient>
     </Modal>
   );
@@ -391,5 +458,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: SparkColors.black,
+  },
+  receiptContainer: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

@@ -36,6 +36,8 @@ export interface UtilityPaymentResult {
     accountNumber: string;
     transactionDate: string;
     status: string;
+    tokenValue?: string; // For electricity - token value
+    units?: string; // For electricity - units purchased
   };
 }
 
@@ -124,7 +126,9 @@ class UtilityPaymentService {
           strkPrice: conversion.strkPrice, // STRK to USD rate
           accountNumber: request.accountNumber,
           transactionDate: new Date().toISOString(),
-          status: 'completed'
+          status: 'completed',
+          tokenValue: vtpassResult.tokenValue || undefined,
+          units: vtpassResult.units || undefined
         }
       };
 
@@ -206,26 +210,22 @@ class UtilityPaymentService {
    * Get VTpass service ID from request
    */
   private getServiceId(request: UtilityPaymentRequest): string {
-    let provider = request.serviceProvider.toUpperCase();
+    let provider = request.serviceProvider;
 
     // For data services, extract network name from service ID (e.g., "mtn-data" -> "MTN")
-    if (request.type === 'data' && provider.includes('-DATA')) {
-      provider = provider.replace('-DATA', '');
+    if (request.type === 'data' && provider.toUpperCase().includes('-DATA')) {
+      provider = provider.toUpperCase().replace('-DATA', '');
     }
 
     switch (request.type) {
       case 'electricity':
-        switch (provider) {
-          case 'PHED': return VTPASS_SERVICES.ELECTRICITY.PHED;
-          case 'IKEDC': return VTPASS_SERVICES.ELECTRICITY.IKEDC;
-          case 'EKEDC': return VTPASS_SERVICES.ELECTRICITY.EKEDC;
-          case 'KEDCO': return VTPASS_SERVICES.ELECTRICITY.KEDCO;
-          case 'JOS': return VTPASS_SERVICES.ELECTRICITY.JOS_ELECTRIC;
-          default: throw new Error(`Unsupported electricity provider: ${provider}`);
-        }
+        // For electricity, the serviceProvider should already be the serviceID (e.g., 'ikedc', 'phed')
+        // This supports dynamic providers fetched from VTpass API
+        return provider.toLowerCase();
 
       case 'airtime':
-        switch (provider) {
+        const providerUpper = provider.toUpperCase();
+        switch (providerUpper) {
           case 'MTN': return VTPASS_SERVICES.AIRTIME.MTN;
           case 'AIRTEL': return VTPASS_SERVICES.AIRTIME.AIRTEL;
           case 'GLO': return VTPASS_SERVICES.AIRTIME.GLO;
@@ -234,7 +234,8 @@ class UtilityPaymentService {
         }
 
       case 'data':
-        switch (provider) {
+        const dataProviderUpper = provider.toUpperCase();
+        switch (dataProviderUpper) {
           case 'MTN': return VTPASS_SERVICES.DATA.MTN;
           case 'AIRTEL': return VTPASS_SERVICES.DATA.AIRTEL;
           case 'GLO': return VTPASS_SERVICES.DATA.GLO;
@@ -244,14 +245,16 @@ class UtilityPaymentService {
 
       case 'tv':
         // Handle both service names and provider names
-        if (provider.includes('DSTV') || provider === 'DSTV') return VTPASS_SERVICES.TV.DSTV;
-        if (provider.includes('GOTV') || provider === 'GOTV') return VTPASS_SERVICES.TV.GOTV;
-        if (provider.includes('STARTIMES') || provider === 'STARTIMES') return VTPASS_SERVICES.TV.STARTIMES;
+        const tvProvider = provider.toUpperCase();
+        if (tvProvider.includes('DSTV') || tvProvider === 'DSTV') return 'dstv';
+        if (tvProvider.includes('GOTV') || tvProvider === 'GOTV') return 'gotv';
+        if (tvProvider.includes('STARTIMES') || tvProvider === 'STARTIMES') return 'startimes';
         
         // Direct serviceID mapping (when serviceID is passed directly)
-        if (provider === 'DSTV' || provider.toLowerCase() === 'dstv') return 'dstv';
-        if (provider === 'GOTV' || provider.toLowerCase() === 'gotv') return 'gotv';
-        if (provider === 'STARTIMES' || provider.toLowerCase() === 'startimes') return 'startimes';
+        const lowerProvider = provider.toLowerCase();
+        if (lowerProvider === 'dstv' || lowerProvider === 'gotv' || lowerProvider === 'startimes') {
+          return lowerProvider;
+        }
         
         throw new Error(`Unsupported TV provider: ${provider}`);
 
@@ -281,8 +284,8 @@ class UtilityPaymentService {
       throw new Error('Missing required payment parameters');
     }
 
-    // Phone number is optional for TV subscriptions
-    if (request.type !== 'tv' && !request.customerPhone) {
+    // Phone number is optional for TV and electricity
+    if (request.type !== 'tv' && request.type !== 'electricity' && !request.customerPhone) {
       throw new Error('Customer phone number is required');
     }
 
@@ -398,9 +401,8 @@ class UtilityPaymentService {
   }
 }
 
-// Supported service providers
+// Supported service providers (legacy - electricity now uses dynamic fetching)
 export const SUPPORTED_PROVIDERS = {
-  ELECTRICITY: ['PHED', 'IKEDC', 'EKEDC', 'KEDCO', 'JOS'],
   AIRTIME: ['MTN', 'AIRTEL', 'GLO', '9MOBILE'],
   DATA: ['MTN', 'AIRTEL', 'GLO', '9MOBILE'],
   TV: ['DSTV', 'GOTV', 'STARTIMES']

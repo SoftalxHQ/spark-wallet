@@ -5,7 +5,7 @@ import { View, TouchableOpacity, ScrollView, Alert, TextInput, Modal, ActivityIn
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SparkColors } from '@/constants/Colors';
-import UtilityPaymentService, { UtilityPaymentRequest, SUPPORTED_PROVIDERS } from '../../services/UtilityPaymentService';
+import UtilityPaymentService, { UtilityPaymentRequest } from '../../services/UtilityPaymentService';
 import VTpassConfigManager from '../../services/VTpassConfig';
 import StorageService from '../../services/StorageService';
 import UtilityPaymentSuccessModal from '../../components/UtilityPaymentSuccessModal';
@@ -99,15 +99,8 @@ export default function UtilityScreen() {
     } catch (error) {
       console.error('Error fetching providers:', error);
       Alert.alert('Error', 'Failed to load service providers');
-      // Fallback to hardcoded providers if API fails
-      const fallbackProviders = getProvidersForUtility(utilityType);
-      setAvailableProviders(fallbackProviders.map(name => ({ 
-        serviceID: name.toLowerCase(), 
-        name: name || 'Unknown Provider',
-        minimium_amount: '0',
-        maximum_amount: '0',
-        image: null
-      })));
+      // No fallback providers - show empty state
+      setAvailableProviders([]);
     } finally {
       setIsLoadingProviders(false);
     }
@@ -196,15 +189,6 @@ export default function UtilityScreen() {
     return plans[provider.toLowerCase()] || [];
   };
 
-  const getProvidersForUtility = (utilityType: string): string[] => {
-    switch (utilityType) {
-      case 'electricity': return SUPPORTED_PROVIDERS.ELECTRICITY;
-      case 'airtime': return SUPPORTED_PROVIDERS.AIRTIME;
-      case 'data': return SUPPORTED_PROVIDERS.DATA;
-      case 'tv': return SUPPORTED_PROVIDERS.TV;
-      default: return [];
-    }
-  };
 
   const validateForm = (): boolean => {
     if (!selectedProvider) {
@@ -215,6 +199,13 @@ export default function UtilityScreen() {
       Alert.alert('Error', 'Please enter account/meter number');
       return false;
     }
+    
+    // For electricity, validate meter type is selected (required by VTpass)
+    if (selectedUtility === 'electricity' && !meterType) {
+      Alert.alert('Error', 'Please select meter type (prepaid or postpaid)');
+      return false;
+    }
+    
     // For data, check if plan is selected instead of amount
     if (selectedUtility === 'data') {
       if (!selectedDataPlan) {
@@ -226,9 +217,19 @@ export default function UtilityScreen() {
         Alert.alert('Error', 'Please enter a valid amount');
         return false;
       }
+      
+      // For electricity, enforce minimum amount based on common VTpass requirements
+      if (selectedUtility === 'electricity') {
+        const amountValue = parseFloat(amount);
+        if (amountValue < 1000) {
+          Alert.alert('Amount Too Low', 'Minimum electricity purchase amount is ₦1,000. Please enter at least ₦1,000.');
+          return false;
+        }
+      }
     }
     
-    if (!customerPhone.trim()) {
+    // Customer phone is only required for non-electricity services
+    if (selectedUtility !== 'electricity' && !customerPhone.trim()) {
       Alert.alert('Error', 'Please enter customer phone number');
       return false;
     }
@@ -268,12 +269,29 @@ export default function UtilityScreen() {
       });
 
       if (verification.code === '000') {
+        // Check if meter number is invalid
+        if (verification.content.WrongBillersCode === true) {
+          const providerName = availableProviders.find(p => p.serviceID === selectedProvider)?.name || selectedProvider;
+          Alert.alert('Invalid Meter Number', `Invalid ${providerName} meter number. Please check and try again.`);
+          setCustomerDetails(null);
+          return;
+        }
+        
+        // Valid verification - set customer details and check minimum amount
         setCustomerDetails(verification.content);
-        Alert.alert(
-          'Customer Verified',
-          `Name: ${verification.content.Customer_Name}\nStatus: ${verification.content.Status}`,
-          [{ text: 'Continue', onPress: () => {} }]
-        );
+        
+        // For electricity, validate minimum purchase amount
+        if (selectedUtility === 'electricity' && verification.content.Min_Purchase_Amount) {
+          const minAmount = parseFloat(verification.content.Min_Purchase_Amount);
+          const currentAmount = parseFloat(amount);
+          if (currentAmount < minAmount) {
+            Alert.alert(
+              'Amount Too Low', 
+              `Minimum purchase amount for this meter is ₦${minAmount.toLocaleString()}. Please enter at least ₦${minAmount.toLocaleString()}.`
+            );
+            return;
+          }
+        }
       } else {
         Alert.alert('Verification Failed', verification.response_description);
       }
@@ -306,8 +324,11 @@ export default function UtilityScreen() {
         accountNumber: accountNumber.trim(),
         amount: selectedUtility === 'data' && selectedDataPlan ? selectedDataPlan.amount : parseFloat(amount),
         // For airtime/data, use the phone number as both account and customer phone
+        // For electricity, provide a default phone number since VTpass API requires it
         customerPhone: (selectedUtility === 'airtime' || selectedUtility === 'data') ? 
-          accountNumber.trim() : customerPhone.trim(),
+          accountNumber.trim() : 
+          selectedUtility === 'electricity' ? '08000000000' : 
+          customerPhone.trim(),
         ...(selectedUtility === 'electricity' && { meterType }),
         ...(selectedUtility === 'data' && selectedDataPlan && { variationCode: selectedDataPlan.code }),
         ...(selectedUtility === 'tv' && selectedPlan && { variationCode: selectedPlan, subscriptionType })
@@ -325,7 +346,9 @@ export default function UtilityScreen() {
           accountNumber: accountNumber.trim(),
           transactionHash: result.transactionHash!,
           token: result.token,
-          customerName: customerDetails?.Customer_Name
+          customerName: customerDetails?.Customer_Name,
+          tokenValue: result.receipt?.tokenValue,
+          units: result.receipt?.units
         };
         
         setPaymentResult(paymentDetails);
@@ -533,7 +556,7 @@ export default function UtilityScreen() {
                     fetchPlans(selectedProvider);
                   }
                 }}
-                placeholder={selectedUtility === 'electricity' ? 'Enter meter number' : 
+                placeholder={selectedUtility === 'electricity' ? 'Enter meter number (e.g., 1111111111111)' : 
                            selectedUtility === 'airtime' || selectedUtility === 'data' ? 'Enter phone number to top up' : 
                            selectedUtility === 'tv' ? 'Enter smartcard number' :
                            'Enter account number'}
@@ -715,8 +738,8 @@ export default function UtilityScreen() {
               </View>
             )}
 
-            {/* Customer Phone (for electricity only) */}
-            {selectedUtility === 'electricity' && (
+            {/* Customer Phone (not required for electricity) */}
+            {selectedUtility !== 'electricity' && (
               <View style={styles.inputSection}>
                 <ThemedText style={styles.inputLabel}>Customer Phone</ThemedText>
                 <TextInput
@@ -737,9 +760,16 @@ export default function UtilityScreen() {
                 <ThemedText style={styles.customerDetailsText}>
                   Name: {customerDetails.Customer_Name}
                 </ThemedText>
-                <ThemedText style={styles.customerDetailsText}>
-                  Status: {customerDetails.Status}
-                </ThemedText>
+                {customerDetails.Meter_Type && (
+                  <ThemedText style={styles.customerDetailsText}>
+                    Meter Type: {customerDetails.Meter_Type}
+                  </ThemedText>
+                )}
+                {customerDetails.Tariff && (
+                  <ThemedText style={styles.customerDetailsText}>
+                    Tariff: {customerDetails.Tariff}
+                  </ThemedText>
+                )}
                 {customerDetails.Address && (
                   <ThemedText style={styles.customerDetailsText}>
                     Address: {customerDetails.Address}
@@ -767,7 +797,7 @@ export default function UtilityScreen() {
               ) : (
                 <TouchableOpacity
                   style={styles.payButton}
-                  onPress={verifyCustomer}
+                  onPress={processPayment}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
@@ -1002,6 +1032,12 @@ const styles = StyleSheet.create({
   },
   meterTypeActiveText: {
     color: SparkColors.black,
+  },
+  hintText: {
+    color: SparkColors.darkGray,
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   textInput: {
     backgroundColor: SparkColors.darkBrown,

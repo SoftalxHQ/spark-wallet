@@ -527,9 +527,13 @@ class VTpassService {
    */
   async getServices(identifier: string): Promise<any> {
     try {
-      // TV services use a different endpoint pattern
+      // Special handling for services that need custom endpoints
       if (identifier === 'tv') {
         return await this.getTVServices();
+      }
+      
+      if (identifier === 'electricity') {
+        return await this.getElectricityServices();
       }
 
       const url = `${this.baseUrl}services`;
@@ -554,6 +558,49 @@ class VTpassService {
       console.error('VTpass: Get services error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get electricity services - hardcoded list based on VTpass documentation
+   * Each provider has individual API documentation, no bulk fetch available
+   */
+  async getElectricityServices(): Promise<any> {
+    console.log('VTpass: Getting electricity services (hardcoded list)');
+
+    // Based on VTpass documentation - each has individual serviceID
+    const electricityProviders = [
+      { serviceID: 'ikeja-electric', name: 'Ikeja Electric (IKEDC)', states: ['Lagos'] },
+      { serviceID: 'eko-electric', name: 'Eko Electric (EKEDC)', states: ['Lagos'] },
+      { serviceID: 'portharcourt-electric', name: 'Port Harcourt Electric (PHED)', states: ['Rivers', 'Bayelsa', 'Cross-River', 'Akwa-Ibom'] },
+      { serviceID: 'kano-electric', name: 'Kano Electric (KEDCO)', states: ['Kano', 'Jigawa', 'Katsina'] },
+      { serviceID: 'jos-electric', name: 'Jos Electric (JEDCo)', states: ['Plateau', 'Bauchi', 'Benue', 'Gombe'] },
+      { serviceID: 'ibadan-electric', name: 'Ibadan Electric (IBEDC)', states: ['Oyo', 'Ogun', 'Osun', 'Kwara'] },
+      { serviceID: 'kaduna-electric', name: 'Kaduna Electric (KAEDCO)', states: ['Kaduna', 'Kebbi', 'Sokoto', 'Zamfara'] },
+      { serviceID: 'abuja-electric', name: 'Abuja Electric (AEDC)', states: ['FCT', 'Kogi', 'Nasarawa', 'Niger'] },
+      { serviceID: 'enugu-electric', name: 'Enugu Electric (EEDC)', states: ['Enugu', 'Abia', 'Anambra', 'Ebonyi', 'Imo'] },
+      { serviceID: 'benin-electric', name: 'Benin Electric (BEDC)', states: ['Edo', 'Delta', 'Ondo', 'Ekiti'] },
+      { serviceID: 'aba-electric', name: 'Aba Electric (ABA)', states: ['Abia'] },
+      { serviceID: 'yola-electric', name: 'Yola Electric (YEDC)', states: ['Adamawa', 'Taraba'] }
+    ];
+
+    const services = electricityProviders.map(provider => ({
+      serviceID: provider.serviceID,
+      name: provider.name,
+      serviceName: provider.name,
+      states: provider.states,
+      variations: [
+        { variation_code: 'prepaid', name: 'Prepaid' },
+        { variation_code: 'postpaid', name: 'Postpaid' }
+      ],
+      minimium_amount: '100',
+      maximum_amount: '50000'
+    }));
+
+    console.log('VTpass: Available electricity services:', services);
+    return {
+      response_description: '000',
+      content: services
+    };
   }
 
   /**
