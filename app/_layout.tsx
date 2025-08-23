@@ -274,6 +274,11 @@ type BackOnlyProps = {
   onBack: () => void;
 };
 
+type SignUpScreenProps = {
+  onBack: () => void;
+  onSignUpSuccess: () => void;
+};
+
 function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -395,7 +400,7 @@ function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
   );
 }
 
-function SignUpScreen({ onBack }: BackOnlyProps) {
+function SignUpScreen({ onBack, onSignUpSuccess }: SignUpScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -446,6 +451,9 @@ function SignUpScreen({ onBack }: BackOnlyProps) {
         
         console.log('StarkNet wallet created and saved:', walletData.address);
         alert('Account created successfully! Your StarkNet wallet has been set up.');
+        
+        // Redirect to login page after successful signup
+        onSignUpSuccess();
       } catch (walletError) {
         console.error('Error creating StarkNet wallet:', walletError);
         if (walletError instanceof Error) {
@@ -852,7 +860,12 @@ function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
     );
   }
   if (step === 'signup') {
-    return <SignUpScreen onBack={() => setStep('authWelcome')} />;
+    return (
+      <SignUpScreen 
+        onBack={() => setStep('authWelcome')} 
+        onSignUpSuccess={() => setStep('login')}
+      />
+    );
   }
   if (step === 'login') {
     return <LoginScreen onBack={() => setStep('authWelcome')} onLogin={onComplete} />;

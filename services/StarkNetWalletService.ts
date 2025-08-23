@@ -93,7 +93,7 @@ class StarkNetWalletService {
       console.log('Public key derived:', publicKey);
       
       console.log('Step 3: Compiling constructor calldata...');
-      const constructorCalldata = CallData.compile({ publicKey });
+      const constructorCalldata = CallData.compile([publicKey]);
       console.log('Constructor calldata:', constructorCalldata);
       
       console.log('Step 4: Calculating contract address...');

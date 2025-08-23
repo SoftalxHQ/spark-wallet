@@ -8,6 +8,7 @@ import { SparkColors } from '@/constants/Colors';
 import UtilityPaymentService, { UtilityPaymentRequest, SUPPORTED_PROVIDERS } from '../../services/UtilityPaymentService';
 import VTpassConfigManager from '../../services/VTpassConfig';
 import StorageService from '../../services/StorageService';
+import UtilityPaymentSuccessModal from '../../components/UtilityPaymentSuccessModal';
 
 export default function UtilityScreen() {
   const [selectedUtility, setSelectedUtility] = useState<string | null>(null);
@@ -34,6 +35,8 @@ export default function UtilityScreen() {
   const [isLoadingDataPlans, setIsLoadingDataPlans] = useState(false);
   const [subscriptionType, setSubscriptionType] = useState<'change' | 'renew'>('change');
   const [showSubscriptionTypeDropdown, setShowSubscriptionTypeDropdown] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [paymentResult, setPaymentResult] = useState<any>(null);
 
   const utilities = [
     { name: 'Electricity', icon: '⚡', color: SparkColors.gold, type: 'electricity' },
@@ -314,19 +317,21 @@ export default function UtilityScreen() {
       const result = await utilityService.processUtilityPayment(walletData, paymentRequest);
 
       if (result.success) {
-        Alert.alert(
-          'Payment Successful!',
-          `Transaction Hash: ${result.transactionHash}\n${result.token ? `Token: ${result.token}` : ''}`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setShowPaymentModal(false);
-                loadRecentPayments();
-              }
-            }
-          ]
-        );
+        // Prepare payment details for success modal
+        const paymentDetails = {
+          utilityType: selectedUtility!,
+          provider: availableProviders.find(p => p.serviceID === selectedProvider)?.name || selectedProvider,
+          amount: selectedUtility === 'data' && selectedDataPlan ? selectedDataPlan.amount : parseFloat(amount),
+          accountNumber: accountNumber.trim(),
+          transactionHash: result.transactionHash!,
+          token: result.token,
+          customerName: customerDetails?.Customer_Name
+        };
+        
+        setPaymentResult(paymentDetails);
+        setShowPaymentModal(false);
+        setShowSuccessModal(true);
+        loadRecentPayments();
       } else {
         Alert.alert('Payment Failed', result.error || 'Unknown error occurred');
       }
@@ -386,6 +391,18 @@ export default function UtilityScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Success Modal */}
+      {paymentResult && (
+        <UtilityPaymentSuccessModal
+          visible={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false);
+            setPaymentResult(null);
+          }}
+          paymentDetails={paymentResult}
+        />
+      )}
 
       {/* Payment Modal */}
       <Modal
