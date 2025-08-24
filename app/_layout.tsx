@@ -325,9 +325,9 @@ function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
               const walletData = await StarkNetWalletService.createSmartWallet();
               console.log('Wallet created successfully:', walletData);
               
-              console.log('Saving wallet to storage...');
-              await StorageService.saveWalletData(walletData);
-              console.log('Wallet saved to storage successfully');
+              console.log('Adding wallet to storage as Account1...');
+              await StorageService.addWallet(walletData);
+              console.log('Wallet added to storage successfully as Account1');
               
               // Verify wallet was saved
               const savedWallet = await StorageService.getWalletData();
@@ -446,9 +446,9 @@ function SignUpScreen({ onBack, onSignUpSuccess }: SignUpScreenProps) {
         const walletData = await StarkNetWalletService.createSmartWallet();
         console.log('Wallet created successfully:', walletData);
         
-        console.log('Saving wallet to storage...');
-        await StorageService.saveWalletData(walletData);
-        console.log('Wallet saved to storage successfully');
+        console.log('Adding wallet to storage as Account1...');
+        await StorageService.addWallet(walletData);
+        console.log('Wallet added to storage successfully as Account1');
         
         // Verify wallet was saved
         const savedWallet = await StorageService.getWalletData();

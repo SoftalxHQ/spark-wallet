@@ -144,12 +144,18 @@ export default function HomeScreen() {
       // Load all wallets for account modal
       const allWallets = await StorageService.getAllWallets();
       console.log('All wallets loaded:', allWallets);
-      const formattedAccounts = allWallets.map((wallet, index) => ({
-        id: wallet.id || wallet.address,
-        name: wallet.name || `Account${index + 1}`,
-        address: `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`,
-        balance: '$0.00', // Will be updated with actual balance
-        isActive: wallet.address === walletData?.address
+      const formattedAccounts = await Promise.all(allWallets.map(async (wallet, index) => {
+        // Check actual deployment status for each wallet
+        const isDeployed = await StarkNetWalletService.isWalletDeployed(wallet.address);
+        
+        return {
+          id: wallet.id || wallet.address,
+          name: wallet.name || `Account${index + 1}`,
+          address: `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`,
+          balance: '$0.00', // Will be updated with actual balance
+          isActive: wallet.address === walletData?.address,
+          isDeployed: isDeployed
+        };
       }));
       console.log('Formatted accounts:', formattedAccounts);
       setAccounts(formattedAccounts);

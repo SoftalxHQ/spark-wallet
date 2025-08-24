@@ -44,9 +44,9 @@ class AutoSwapperService {
     if (!this.autoswappr) {
       this.autoswappr = new AutoSwappr({
         contractAddress: this.getAutoswapperAddress(),
-        rpcUrl: NetworkConfigService.getRpcUrl(),
+        rpcUrl: 'https://starknet-mainnet.public.blastapi.io/rpc/v0_7',
         accountAddress: walletData.address,
-        privateKey: walletData.privateKey,
+        privateKey: walletData.privateKey
       });
     }
   }

@@ -34,8 +34,8 @@ export default function ImportWalletModal({ visible, onClose, onWalletImported }
       // Create wallet from mnemonic
       const walletData = await StarkNetWalletService.createWalletFromMnemonic(mnemonic.trim());
       
-      // Save wallet to storage
-      await StorageService.saveWalletData(walletData);
+      // Add wallet to storage (will be named Account1 if first wallet, or incremental number)
+      await StorageService.addWallet(walletData);
       
       Alert.alert(
         'Success', 
