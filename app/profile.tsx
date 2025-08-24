@@ -6,6 +6,7 @@ import { SparkColors } from '@/constants/Colors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import NetworkConfigService, { NetworkType } from '@/services/NetworkConfigService';
 import StorageService from '@/services/StorageService';
+import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import AppLockScreen from '@/components/AppLockScreen';
 import NetworkSelector from '@/components/NetworkSelector';
@@ -64,6 +65,9 @@ export default function ProfileScreen() {
     
     // Switch network using NetworkConfigService (this will handle service updates)
     await NetworkConfigService.switchNetwork(network);
+    
+    // Force app reload to refetch all data with new network
+    router.replace('/(tabs)');
   };
 
 
