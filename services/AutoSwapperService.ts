@@ -3,30 +3,15 @@
  * Integrates with AutoSwapper SDK for token swapping on StarkNet
  */
 
-import { RpcProvider, Contract, CallData, Account, cairo } from 'starknet';
+import { AutoSwappr, TOKEN_ADDRESSES } from 'autoswap-sdk';
 import NetworkConfigService from './NetworkConfigService';
 
-// Import AutoSwap SDK (uncomment when package is installed)
-// import { AutoswapClient } from 'autoswap-sdk';)
-// Note: Temporarily commented out until SDK is properly installed
-// import { AutoswapClient } from 'autoswap-sdk';
-
-export interface SwapQuote {
-  fromToken: string;
-  toToken: string;
-  fromAmount: string;
-  toAmount: string;
-  priceImpact: number;
-  minimumReceived: string;
-  route: string[];
-}
 
 export interface SwapParams {
   fromToken: string;
   toToken: string;
   amount: string;
-  slippage: number; // in basis points (e.g., 50 = 0.5%)
-  recipient?: string;
+  version?: string;
 }
 
 export interface SwapResult {
@@ -38,54 +23,10 @@ export interface SwapResult {
 
 class AutoSwapperService {
   private static instance: AutoSwapperService;
-  private provider!: RpcProvider;
-  // private autoswapClient!: AutoswapClient; // Uncomment when SDK is installed
-  
-  // Network-specific addresses will be loaded from NetworkConfigService
-
-  // AutoSwapper ABI - Basic functions for swapping
-  private readonly AUTOSWAPPER_ABI = [
-    {
-      "type": "function",
-      "name": "swap_exact_tokens_for_tokens",
-      "inputs": [
-        { "name": "amount_in", "type": "core::integer::u256" },
-        { "name": "amount_out_min", "type": "core::integer::u256" },
-        { "name": "path", "type": "core::array::Array::<core::starknet::contract_address::ContractAddress>" },
-        { "name": "to", "type": "core::starknet::contract_address::ContractAddress" },
-        { "name": "deadline", "type": "core::integer::u64" }
-      ],
-      "outputs": [
-        { "type": "core::array::Array::<core::integer::u256>" }
-      ],
-      "state_mutability": "external"
-    },
-    {
-      "type": "function",
-      "name": "get_amounts_out",
-      "inputs": [
-        { "name": "amount_in", "type": "core::integer::u256" },
-        { "name": "path", "type": "core::array::Array::<core::starknet::contract_address::ContractAddress>" }
-      ],
-      "outputs": [
-        { "type": "core::array::Array::<core::integer::u256>" }
-      ],
-      "state_mutability": "view"
-    }
-  ];
+  private autoswappr: AutoSwappr | null = null;
 
   private constructor() {
-    this.initializeProvider();
-    
-    // Initialize AutoSwap SDK client (uncomment when SDK is installed)
-    // this.autoswapClient = new AutoswapClient({ 
-    //   apiKey: process.env.EXPO_PUBLIC_AUTOSWAP_API_KEY || process.env.AUTOSWAP_API_KEY || ''
-    // });
-  }
-
-  private initializeProvider() {
-    const rpcUrl = NetworkConfigService.getRpcUrl();
-    this.provider = new RpcProvider({ nodeUrl: rpcUrl });
+    // SDK will be initialized when needed with wallet data
   }
 
   private getAutoswapperAddress(): string {
@@ -97,10 +38,17 @@ class AutoSwapperService {
   }
 
   /**
-   * Refresh network configuration (call when network changes)
+   * Initialize AutoSwappr SDK with wallet data
    */
-  refreshNetworkConfig() {
-    this.initializeProvider();
+  private initializeSDK(walletData: any) {
+    if (!this.autoswappr) {
+      this.autoswappr = new AutoSwappr({
+        contractAddress: this.getAutoswapperAddress(),
+        rpcUrl: NetworkConfigService.getRpcUrl(),
+        accountAddress: walletData.address,
+        privateKey: walletData.privateKey,
+      });
+    }
   }
 
   static getInstance(): AutoSwapperService {
@@ -110,146 +58,45 @@ class AutoSwapperService {
     return AutoSwapperService.instance;
   }
 
-  /**
-   * Create payment using AutoSwap SDK
-   * This is the new SDK-based payment method
-   */
-  async createPayment(amount: number, currency: string, recipient: string): Promise<{ paymentUrl: string; transactionId: string }> {
-    try {
-      console.log('AutoSwap SDK: Creating payment', { amount, currency, recipient });
-      
-      // TODO: Uncomment when SDK is properly installed
-      // const tx = await this.autoswapClient.createPayment({
-      //   amount,
-      //   currency,
-      //   recipient
-      // });
-      // return { paymentUrl: tx.paymentUrl, transactionId: tx.id };
-      
-      // Temporary fallback - remove when SDK is working
-      throw new Error('AutoSwap SDK not yet configured. Please install autoswap-sdk and configure API key.');
-      
-    } catch (error) {
-      console.error('AutoSwap SDK: Failed to create payment:', error);
-      throw new Error(`Failed to create payment: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+
 
   /**
-   * Get swap quote for token pair
-   */
-  async getSwapQuote(params: SwapParams): Promise<SwapQuote> {
-    try {
-      console.log('AutoSwapper: Getting quote for swap', params);
-
-      // Create contract instance
-      const contract = new Contract(this.AUTOSWAPPER_ABI, this.getAutoswapperAddress(), this.provider);
-
-      // Convert amount to proper format based on token decimals
-      const fromTokenDecimals = this.getTokenDecimals(params.fromToken);
-      const toTokenDecimals = this.getTokenDecimals(params.toToken);
-      
-      const amountIn = this.parseTokenAmount(params.amount, fromTokenDecimals);
-      const path = [params.fromToken, params.toToken];
-
-      // Get amounts out from AutoSwapper
-      const amountsOut = await contract.get_amounts_out(amountIn, path);
-      const amountOut = amountsOut[amountsOut.length - 1];
-
-      // Calculate minimum received with slippage
-      const slippageMultiplier = (10000 - params.slippage) / 10000;
-      const minimumReceived = BigInt(Math.floor(Number(amountOut) * slippageMultiplier));
-
-      // Format amounts for display
-      const fromAmountFormatted = this.formatTokenAmount(amountIn.toString(), fromTokenDecimals);
-      const toAmountFormatted = this.formatTokenAmount(amountOut.toString(), toTokenDecimals);
-      const minimumReceivedFormatted = this.formatTokenAmount(minimumReceived.toString(), toTokenDecimals);
-
-      // Calculate price impact (simplified)
-      const priceImpact = 0.1; // This would need proper calculation based on pool reserves
-
-      return {
-        fromToken: params.fromToken,
-        toToken: params.toToken,
-        fromAmount: fromAmountFormatted,
-        toAmount: toAmountFormatted,
-        priceImpact,
-        minimumReceived: minimumReceivedFormatted,
-        route: path
-      };
-
-    } catch (error) {
-      console.error('AutoSwapper: Failed to get quote:', error);
-      throw new Error(`Failed to get swap quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Execute token swap
+   * Execute token swap using AutoSwappr SDK
    */
   async executeSwap(walletData: any, params: SwapParams): Promise<SwapResult> {
     try {
-      console.log('AutoSwapper: Executing swap', params);
+      console.log('AutoSwapper SDK: Executing swap', params);
 
-      // Create account instance
-      const account = new Account(this.provider, walletData.address, walletData.privateKey);
+      // Initialize SDK with wallet data
+      this.initializeSDK(walletData);
 
-      // Get quote first to determine amounts
-      const quote = await this.getSwapQuote(params);
-      
-      const fromTokenDecimals = this.getTokenDecimals(params.fromToken);
-      const toTokenDecimals = this.getTokenDecimals(params.toToken);
-      
-      const amountIn = this.parseTokenAmount(params.amount, fromTokenDecimals);
-      const amountOutMin = this.parseTokenAmount(quote.minimumReceived, toTokenDecimals);
-      
-      const path = [params.fromToken, params.toToken];
-      const recipient = params.recipient || walletData.address;
-      const deadline = Math.floor(Date.now() / 1000) + 1800; // 30 minutes from now
+      if (!this.autoswappr) {
+        throw new Error('Failed to initialize AutoSwappr SDK');
+      }
 
-      // First, approve AutoSwapper to spend the from token
-      console.log('AutoSwapper: Approving token spending...');
-      const approveCalldata = CallData.compile({
-        contract_address: this.getAutoswapperAddress(),
-        amount: cairo.uint256(amountIn)
-      });
+      // Map our token addresses to SDK token addresses
+      const fromTokenAddress = this.mapToSDKTokenAddress(params.fromToken);
+      const toTokenAddress = this.mapToSDKTokenAddress(params.toToken);
 
-      const approveResult = await account.execute({
-        contractAddress: params.fromToken,
-        entrypoint: 'approve',
-        calldata: approveCalldata
-      });
+      // Execute swap using SDK
+      const result = await this.autoswappr.executeSwap(
+        fromTokenAddress,
+        toTokenAddress,
+        {
+          amount: params.amount,
+        }
+      );
 
-      console.log('AutoSwapper: Approve transaction:', approveResult.transaction_hash);
-      await this.provider.waitForTransaction(approveResult.transaction_hash);
-
-      // Execute the swap
-      console.log('AutoSwapper: Executing swap transaction...');
-      const swapCalldata = CallData.compile({
-        amount_in: cairo.uint256(amountIn),
-        amount_out_min: cairo.uint256(amountOutMin),
-        path: path,
-        to: recipient,
-        deadline: deadline
-      });
-
-      const swapResult = await account.execute({
-        contractAddress: this.getAutoswapperAddress(),
-        entrypoint: 'swap_exact_tokens_for_tokens',
-        calldata: swapCalldata
-      });
-
-      console.log('AutoSwapper: Swap transaction:', swapResult.transaction_hash);
-      await this.provider.waitForTransaction(swapResult.transaction_hash);
+      console.log('AutoSwapper SDK: Swap result:', result);
 
       return {
         success: true,
-        transactionHash: swapResult.transaction_hash,
-        amountOut: quote.toAmount
+        transactionHash: result.result.transaction_hash,
+        amountOut: params.amount // SDK doesn't return amount out, use input amount as placeholder
       };
 
     } catch (error) {
-      console.error('AutoSwapper: Swap execution failed:', error);
+      console.error('AutoSwapper SDK: Swap execution failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -301,6 +148,30 @@ class AutoSwapperService {
     }
     
     return `${wholePart}.${trimmedFractional}`;
+  }
+
+  /**
+   * Map our token addresses to SDK token addresses
+   */
+  private mapToSDKTokenAddress(tokenAddress: string): string {
+    const tokenAddresses = this.getTokenAddresses();
+    
+    // Map to SDK TOKEN_ADDRESSES constants
+    if (tokenAddress.toLowerCase() === tokenAddresses.STRK.toLowerCase()) {
+      return TOKEN_ADDRESSES.STRK;
+    }
+    if (tokenAddress.toLowerCase() === tokenAddresses.ETH.toLowerCase()) {
+      return TOKEN_ADDRESSES.ETH;
+    }
+    if (tokenAddress.toLowerCase() === tokenAddresses.USDC.toLowerCase()) {
+      return TOKEN_ADDRESSES.USDC;
+    }
+    if (tokenAddress.toLowerCase() === tokenAddresses.USDT.toLowerCase()) {
+      return TOKEN_ADDRESSES.USDT;
+    }
+    
+    // Fallback to original address if no mapping found
+    return tokenAddress;
   }
 
   /**

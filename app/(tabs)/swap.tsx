@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 
 import { ThemedText } from '@/components/ThemedText';
 import { SparkColors } from '@/constants/Colors';
-import AutoSwapperService, { SwapQuote, SwapParams } from '@/services/AutoSwapperService';
+import AutoSwapperService, { SwapParams } from '@/services/AutoSwapperService';
 import StorageService from '@/services/StorageService';
 import StarkNetWalletService from '@/services/StarkNetWalletService';
 import TokenSelector from '@/components/TokenSelector';
+import NetworkConfigService from '@/services/NetworkConfigService';
 
 interface Token {
   address: string;
@@ -24,11 +25,10 @@ export default function SwapScreen() {
   const [toToken, setToToken] = useState<Token | null>(null);
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
-  const [quote, setQuote] = useState<SwapQuote | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSwapping, setIsSwapping] = useState(false);
   const [walletData, setWalletData] = useState<any>(null);
   const [supportedTokens, setSupportedTokens] = useState<Token[]>([]);
+  const [currentNetwork, setCurrentNetwork] = useState<string>('mainnet');
 
   useEffect(() => {
     initializeSwap();
@@ -36,6 +36,11 @@ export default function SwapScreen() {
 
   const initializeSwap = async () => {
     try {
+      // Initialize network service and get current network
+      await NetworkConfigService.initialize();
+      const network = NetworkConfigService.getCurrentNetwork();
+      setCurrentNetwork(network);
+
       // Load wallet data
       const wallet = await StorageService.getWalletData();
       setWalletData(wallet);
@@ -70,8 +75,8 @@ export default function SwapScreen() {
       setSupportedTokens(tokens);
 
       // Set default tokens
-      const ethToken = tokens.find(t => t.symbol === 'ETH');
       const strkToken = tokens.find(t => t.symbol === 'STRK');
+      const ethToken = tokens.find(t => t.symbol === 'ETH');
       
       if (ethToken) setFromToken(ethToken);
       if (strkToken) setToToken(strkToken);
@@ -81,37 +86,9 @@ export default function SwapScreen() {
     }
   };
 
-  const getQuote = async () => {
-    if (!fromToken || !toToken || !fromAmount || parseFloat(fromAmount) <= 0) {
-      setToAmount('');
-      setQuote(null);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const swapParams: SwapParams = {
-        fromToken: fromToken.address,
-        toToken: toToken.address,
-        amount: fromAmount,
-        slippage: 50 // 0.5% slippage
-      };
-
-      const newQuote = await AutoSwapperService.getSwapQuote(swapParams);
-      setQuote(newQuote);
-      setToAmount(newQuote.toAmount);
-    } catch (error) {
-      console.error('Failed to get quote:', error);
-      Alert.alert('Error', 'Failed to get swap quote. Please try again.');
-      setToAmount('');
-      setQuote(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const executeSwap = async () => {
-    if (!fromToken || !toToken || !fromAmount || !walletData || !quote) {
+    if (!fromToken || !toToken || !fromAmount || !walletData) {
       Alert.alert('Error', 'Please complete all swap details');
       return;
     }
@@ -122,7 +99,7 @@ export default function SwapScreen() {
         fromToken: fromToken.address,
         toToken: toToken.address,
         amount: fromAmount,
-        slippage: 50
+        version: "0x3"
       };
 
       const result = await AutoSwapperService.executeSwap(walletData, swapParams);
@@ -130,11 +107,10 @@ export default function SwapScreen() {
       if (result.success) {
         Alert.alert(
           'Swap Successful!',
-          `Swapped ${fromAmount} ${fromToken.symbol} for ${result.amountOut} ${toToken.symbol}\n\nTransaction: ${result.transactionHash}`,
+          `Swapped ${fromAmount} ${fromToken.symbol}\n\nTransaction: ${result.transactionHash}`,
           [{ text: 'OK', onPress: () => {
             setFromAmount('');
             setToAmount('');
-            setQuote(null);
           }}]
         );
       } else {
@@ -154,10 +130,32 @@ export default function SwapScreen() {
     setToToken(tempToken);
     setFromAmount(toAmount);
     setToAmount(fromAmount);
-    setQuote(null);
   };
 
-  const isSwapReady = fromToken && toToken && fromAmount && parseFloat(fromAmount) > 0 && walletData && !isLoading;
+  const isSwapReady = fromToken && toToken && fromAmount && parseFloat(fromAmount) > 0 && walletData;
+  
+  // Show testnet message if on Sepolia
+  if (currentNetwork === 'sepolia') {
+    return (
+      <LinearGradient
+        colors={[SparkColors.black, SparkColors.darkBrown]}
+        style={styles.container}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={styles.testnetContainer}>
+          <ThemedText type="title" style={styles.title}>Swap Tokens</ThemedText>
+          <View style={styles.testnetMessage}>
+            <ThemedText style={styles.testnetTitle}>⚠️ Swap Not Available</ThemedText>
+            <ThemedText style={styles.testnetText}>
+              Token swapping is not available on testnet. Please switch to mainnet to use the swap feature.
+            </ThemedText>
+          </View>
+        </View>
+      </LinearGradient>
+    );
+  }
+
   return (
     <LinearGradient
       colors={[SparkColors.black, SparkColors.darkBrown]}
@@ -183,7 +181,6 @@ export default function SwapScreen() {
                 setFromToken(token);
                 setFromAmount('');
                 setToAmount('');
-                setQuote(null);
               }}
               placeholder="Select token"
             />
@@ -201,8 +198,6 @@ export default function SwapScreen() {
               value={fromAmount}
               onChangeText={(text) => {
                 setFromAmount(text);
-                // Debounce quote fetching
-                setTimeout(() => getQuote(), 500);
               }}
               placeholder="0.0"
               placeholderTextColor={SparkColors.darkGray}
@@ -213,7 +208,6 @@ export default function SwapScreen() {
               onPress={() => {
                 if (fromToken?.balanceFormatted) {
                   setFromAmount(fromToken.balanceFormatted);
-                  setTimeout(() => getQuote(), 500);
                 }
               }}
             >
@@ -236,8 +230,6 @@ export default function SwapScreen() {
               tokens={supportedTokens.filter(token => token.address !== fromToken?.address)}
               onTokenSelect={(token: Token) => {
                 setToToken(token);
-                setToAmount('');
-                setQuote(null);
               }}
               placeholder="Select token"
             />
@@ -250,35 +242,10 @@ export default function SwapScreen() {
           
           {/* Amount Display */}
           <View style={styles.toAmountContainer}>
-            {isLoading ? (
-              <ActivityIndicator size="small" color={SparkColors.gold} />
-            ) : (
-              <ThemedText style={styles.amount}>{toAmount || '0.0'}</ThemedText>
-            )}
+            <ThemedText style={styles.amount}>{toAmount || '0.0'}</ThemedText>
           </View>
         </View>
 
-        {quote && (
-          <View style={styles.quoteCard}>
-            <ThemedText style={styles.quoteTitle}>Swap Details</ThemedText>
-            <View style={styles.quoteRow}>
-              <ThemedText style={styles.quoteLabel}>Rate</ThemedText>
-              <ThemedText style={styles.quoteValue}>
-                1 {fromToken?.symbol} = {(parseFloat(quote.toAmount) / parseFloat(quote.fromAmount)).toFixed(6)} {toToken?.symbol}
-              </ThemedText>
-            </View>
-            <View style={styles.quoteRow}>
-              <ThemedText style={styles.quoteLabel}>Price Impact</ThemedText>
-              <ThemedText style={[styles.quoteValue, { color: quote.priceImpact > 5 ? SparkColors.red : SparkColors.green }]}>
-                {quote.priceImpact.toFixed(2)}%
-              </ThemedText>
-            </View>
-            <View style={styles.quoteRow}>
-              <ThemedText style={styles.quoteLabel}>Minimum Received</ThemedText>
-              <ThemedText style={styles.quoteValue}>{quote.minimumReceived} {toToken?.symbol}</ThemedText>
-            </View>
-          </View>
-        )}
 
         <TouchableOpacity 
           style={[
@@ -492,5 +459,33 @@ const styles = StyleSheet.create({
   },
   tokenSelectorContainer: {
     flex: 1,
+  },
+  testnetContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  testnetMessage: {
+    backgroundColor: SparkColors.darkBrown,
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 32,
+    borderWidth: 1,
+    borderColor: SparkColors.brown,
+    alignItems: 'center',
+  },
+  testnetTitle: {
+    color: SparkColors.gold,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  testnetText: {
+    color: SparkColors.lightGray,
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
