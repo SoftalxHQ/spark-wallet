@@ -98,7 +98,7 @@ export default function BiometricModal({ visible, onClose, onEnableBiometric }: 
             </View>
             <View style={styles.featureItem}>
               <ThemedText style={styles.checkIcon}>✓</ThemedText>
-              <ThemedText style={styles.featureText}>Password stored in secure enclave</ThemedText>
+              <ThemedText style={styles.featureText}>Secure biometric authentication</ThemedText>
             </View>
           </View>
 

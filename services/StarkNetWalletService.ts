@@ -9,6 +9,7 @@ import { Account, CallData, RpcProvider, cairo, ec, hash, stark } from 'starknet
 import priceService from './PriceService';
 import StorageService from './StorageService';
 import NetworkConfigService from './NetworkConfigService';
+import MnemonicService from './MnemonicService';
 
 export interface StarkNetWalletData {
   id?: string;
@@ -17,6 +18,7 @@ export interface StarkNetWalletData {
   privateKey: string;
   salt: string;
   name?: string;
+  mnemonic?: string;
 }
 
 export interface TokenBalance {
@@ -92,11 +94,15 @@ class StarkNetWalletService {
       const publicKey = ec.starkCurve.getStarkKey(privateKey);
       console.log('Public key derived:', publicKey);
       
-      console.log('Step 3: Compiling constructor calldata...');
+      console.log('Step 3: Generating mnemonic phrase...');
+      const mnemonic = MnemonicService.generateMnemonicFromPrivateKey(privateKey);
+      console.log('Mnemonic generated (12 words)');
+      
+      console.log('Step 4: Compiling constructor calldata...');
       const constructorCalldata = CallData.compile([publicKey]);
       console.log('Constructor calldata:', constructorCalldata);
       
-      console.log('Step 4: Calculating contract address...');
+      console.log('Step 5: Calculating contract address...');
       const accountClassHash = NetworkConfigService.getAccountClassHash();
       console.log('Using account class hash:', accountClassHash);
       console.log('Using salt (public key):', publicKey);
@@ -117,6 +123,7 @@ class StarkNetWalletService {
         publicKey: publicKey,
         privateKey: privateKey,
         salt: publicKey,
+        mnemonic: mnemonic,
         name: undefined // Name will be assigned by StorageService based on account count
       };
       
@@ -124,7 +131,8 @@ class StarkNetWalletService {
         address: walletData.address,
         publicKey: walletData.publicKey,
         privateKey: '[REDACTED]',
-        salt: walletData.salt
+        salt: walletData.salt,
+        mnemonic: '[REDACTED]'
       });
       
       console.log('Smart wallet created successfully');
@@ -134,6 +142,60 @@ class StarkNetWalletService {
       if (error instanceof Error) {
         console.error('Creation error stack:', error.stack);
       }
+      throw error;
+    }
+  }
+
+  // Create wallet from mnemonic phrase
+  async createWalletFromMnemonic(mnemonic: string): Promise<StarkNetWalletData> {
+    try {
+      console.log('Creating wallet from mnemonic phrase...');
+      
+      // Validate mnemonic
+      if (!MnemonicService.validateMnemonic(mnemonic)) {
+        throw new Error('Invalid mnemonic phrase');
+      }
+      
+      console.log('Step 1: Deriving private key from mnemonic...');
+      const privateKey = MnemonicService.derivePrivateKeyFromMnemonic(mnemonic);
+      console.log('Private key derived from mnemonic');
+      
+      console.log('Step 2: Deriving public key...');
+      const publicKey = ec.starkCurve.getStarkKey(privateKey);
+      console.log('Public key derived:', publicKey);
+      
+      console.log('Step 3: Compiling constructor calldata...');
+      const constructorCalldata = CallData.compile([publicKey]);
+      console.log('Constructor calldata:', constructorCalldata);
+      
+      console.log('Step 4: Calculating contract address...');
+      const accountClassHash = NetworkConfigService.getAccountClassHash();
+      console.log('Using account class hash:', accountClassHash);
+      
+      const rawAddress = hash.calculateContractAddressFromHash(
+        publicKey, // salt
+        accountClassHash,
+        constructorCalldata,
+        0 // deployer address
+      );
+      console.log('Raw calculated address:', rawAddress);
+      
+      const formattedAddress = this.ensureAddressFormat(rawAddress);
+      console.log('Formatted wallet address:', formattedAddress);
+      
+      const walletData: StarkNetWalletData = {
+        address: formattedAddress,
+        publicKey: publicKey,
+        privateKey: privateKey,
+        salt: publicKey,
+        mnemonic: mnemonic,
+        name: undefined
+      };
+      
+      console.log('Wallet restored from mnemonic successfully');
+      return walletData;
+    } catch (error) {
+      console.error('Error creating wallet from mnemonic:', error);
       throw error;
     }
   }

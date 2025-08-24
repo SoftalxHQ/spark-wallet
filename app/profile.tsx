@@ -11,6 +11,7 @@ import AppLockScreen from '@/components/AppLockScreen';
 import NetworkSelector from '@/components/NetworkSelector';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
 import BiometricModal from '@/components/BiometricModal';
+import RecoveryPhraseModal from '@/components/RecoveryPhraseModal';
 
 export default function ProfileScreen() {
   const [, setCurrentNetwork] = useState<NetworkType>('mainnet');
@@ -20,8 +21,10 @@ export default function ProfileScreen() {
   const [activeWallet, setActiveWallet] = useState<any>(null);
   const [showPrivateKeyLock, setShowPrivateKeyLock] = useState(false);
   const [showRecoveryPhraseLock, setShowRecoveryPhraseLock] = useState(false);
+  const [showRecoveryPhraseModal, setShowRecoveryPhraseModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showBiometricModal, setShowBiometricModal] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
 
   useEffect(() => {
     loadProfileData();
@@ -32,20 +35,25 @@ export default function ProfileScreen() {
       // Load current network
       const network = NetworkConfigService.getCurrentNetwork();
       setCurrentNetwork(network);
-
-      // Load user email from storage
+      
+      // Load user data
       const userData = await StorageService.getUserData();
       if (userData?.email) {
         setUserEmail(userData.email);
       }
-
-      // Load active wallet address
+      
+      // Load active wallet
       const wallet = await StorageService.getActiveWallet();
       if (wallet) {
         setActiveWallet(wallet);
-        const shortAddress = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
-        setWalletAddress(shortAddress);
+        // Format wallet address for display
+        const formattedAddress = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
+        setWalletAddress(formattedAddress);
       }
+
+      // Check biometric status
+      const isBiometricEnabled = await StorageService.isBiometricEnabled();
+      setBiometricEnabled(isBiometricEnabled);
     } catch (error) {
       console.error('Error loading profile data:', error);
     }
@@ -99,11 +107,7 @@ export default function ProfileScreen() {
     setShowRecoveryPhraseLock(false);
     
     if (activeWallet?.mnemonic) {
-      Alert.alert(
-        'Recovery Phrase',
-      'Recovery phrase functionality will be implemented in the next phase.',
-      [{ text: 'OK' }]
-      );
+      setShowRecoveryPhraseModal(true);
     } else {
       Alert.alert('Error', 'No recovery phrase available');
     }
@@ -127,14 +131,39 @@ export default function ProfileScreen() {
 
   const handleEnableBiometric = async () => {
     try {
-      // In a real app, you would check biometric availability here
+      // Enable biometric authentication
       await StorageService.setBiometricEnabled(true);
-      Alert.alert('Success', 'Biometric login enabled');
+      setBiometricEnabled(true);
+      Alert.alert('Success', 'Biometric login enabled successfully');
       setShowBiometricModal(false);
     } catch (error) {
       console.error('Error enabling biometric:', error);
-      Alert.alert('Error', 'Failed to enable biometric login');
+      Alert.alert('Error', 'Failed to enable biometric login. Please try again.');
     }
+  };
+
+  const handleDisableBiometric = async () => {
+    Alert.alert(
+      'Disable Biometric Login',
+      'Are you sure you want to disable biometric authentication?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disable',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await StorageService.setBiometricEnabled(false);
+              setBiometricEnabled(false);
+              Alert.alert('Success', 'Biometric login disabled');
+            } catch (error) {
+              console.error('Error disabling biometric:', error);
+              Alert.alert('Error', 'Failed to disable biometric login');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const profileSections = [
@@ -149,7 +178,12 @@ export default function ProfileScreen() {
       title: 'Security',
       items: [
         { name: 'Change Password', icon: '🔒', onPress: () => setShowChangePasswordModal(true), value: undefined },
-        { name: 'Biometric Login', icon: '👆', onPress: () => setShowBiometricModal(true), value: undefined },
+        { 
+          name: biometricEnabled ? 'Disable Biometric Login' : 'Biometric Login', 
+          icon: '👆', 
+          onPress: biometricEnabled ? handleDisableBiometric : () => setShowBiometricModal(true), 
+          value: undefined 
+        },
       ]
     },
     {
@@ -325,6 +359,13 @@ export default function ProfileScreen() {
       visible={showBiometricModal}
       onClose={() => setShowBiometricModal(false)}
       onEnableBiometric={handleEnableBiometric}
+    />
+
+    {/* Recovery Phrase Modal */}
+    <RecoveryPhraseModal
+      visible={showRecoveryPhraseModal}
+      onClose={() => setShowRecoveryPhraseModal(false)}
+      mnemonic={activeWallet?.mnemonic || ''}
     />
   </LinearGradient>
 );
