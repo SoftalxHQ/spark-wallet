@@ -321,6 +321,55 @@ class StorageService {
     }
   }
 
+  // App Lock Management
+  async setAppLocked(locked: boolean): Promise<void> {
+    try {
+      await AsyncStorage.setItem('spark_app_locked', locked.toString());
+    } catch (error) {
+      console.error('Error setting app lock status:', error);
+    }
+  }
+
+  async isAppLocked(): Promise<boolean> {
+    try {
+      const locked = await AsyncStorage.getItem('spark_app_locked');
+      return locked === 'true';
+    } catch (error) {
+      console.error('Error checking app lock status:', error);
+      return false;
+    }
+  }
+
+  async saveUserPassword(password: string): Promise<void> {
+    try {
+      // In a real app, you'd hash this password
+      await AsyncStorage.setItem('spark_user_password', password);
+    } catch (error) {
+      console.error('Error saving user password:', error);
+      throw error;
+    }
+  }
+
+  async validateUserPassword(password: string): Promise<boolean> {
+    try {
+      const storedPassword = await AsyncStorage.getItem('spark_user_password');
+      return storedPassword === password;
+    } catch (error) {
+      console.error('Error validating user password:', error);
+      return false;
+    }
+  }
+
+  async hasUserPassword(): Promise<boolean> {
+    try {
+      const password = await AsyncStorage.getItem('spark_user_password');
+      return password !== null;
+    } catch (error) {
+      console.error('Error checking user password:', error);
+      return false;
+    }
+  }
+
   // Clear Data (Logout)
   async clearUserData(): Promise<void> {
     try {

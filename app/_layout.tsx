@@ -8,11 +8,12 @@ import { SparkColors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View, AppState } from 'react-native';
 // import SimpleGoogleSignInService from '../services/SimpleGoogleSignInService';
 import MockGoogleSignInService from '../services/MockGoogleSignInService';
 import StarkNetWalletService from '../services/StarkNetWalletService';
 import StorageService from '../services/StorageService';
+import AppLockScreen from '@/components/AppLockScreen';
 
 
 
@@ -312,6 +313,10 @@ function AuthWelcomeScreen({ onSignUp, onLogin }: WelcomeScreenProps) {
             };
             await StorageService.saveUserData(userData);
             await StorageService.setOnboardingCompleted();
+            
+            // Set a default password for app lock (in real app, user would set this)
+            await StorageService.saveUserPassword('123456');
+            console.log('Default password set during onboarding');
             
             // Create StarkNet smart contract wallet
             console.log('=== WALLET CREATION PROCESS ===');
@@ -747,6 +752,7 @@ export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [isCheckingStorage, setIsCheckingStorage] = useState(true);
+  const [isAppLocked, setIsAppLocked] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 2000);
@@ -763,6 +769,23 @@ export default function RootLayout() {
         // If user has completed onboarding or has user data, skip onboarding
         if (storageInfo.onboardingCompleted || storageInfo.hasUserData) {
           setShowOnboarding(false);
+          
+          // Check if app should be locked and user has password
+          const hasPassword = await StorageService.hasUserPassword();
+          console.log('User has password on startup:', hasPassword);
+          
+          // If user doesn't have password but has completed onboarding, set default password
+          if (!hasPassword && storageInfo.hasUserData) {
+            console.log('Setting default password for existing user');
+            await StorageService.saveUserPassword('123456');
+          }
+          
+          const finalHasPassword = await StorageService.hasUserPassword();
+          if (finalHasPassword) {
+            const locked = await StorageService.isAppLocked();
+            console.log('App locked status on startup:', locked);
+            setIsAppLocked(locked);
+          }
         }
       } catch (error) {
         console.error('Error checking user data:', error);
@@ -778,6 +801,34 @@ export default function RootLayout() {
     }
   }, [showSplash]);
 
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: string) => {
+      console.log('App state changed to:', nextAppState);
+      
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // App is going to background, lock it
+        console.log('App going to background, checking for password...');
+        const hasPassword = await StorageService.hasUserPassword();
+        console.log('Has password:', hasPassword);
+        if (hasPassword) {
+          console.log('Setting app as locked');
+          await StorageService.setAppLocked(true);
+          setIsAppLocked(true);
+        }
+      } else if (nextAppState === 'active') {
+        // App is coming to foreground, check if it should be locked
+        console.log('App coming to foreground, checking lock status...');
+        const locked = await StorageService.isAppLocked();
+        console.log('App is locked:', locked);
+        setIsAppLocked(locked);
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, []);
+
   if (!loaded) {
     return null;
   }
@@ -790,6 +841,13 @@ export default function RootLayout() {
   // Show loading while checking storage
   if (isCheckingStorage) {
     return <SplashScreen />;
+  }
+
+  // Show app lock screen if locked
+  if (isAppLocked) {
+    return (
+      <AppLockScreen onUnlock={() => setIsAppLocked(false)} />
+    );
   }
 
   // Show onboarding flow
