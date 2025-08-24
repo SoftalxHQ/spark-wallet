@@ -113,6 +113,16 @@ class StorageService {
     }
   }
 
+  async updateWalletName(name: string): Promise<void> {
+    try {
+      await this.updateWalletData({ name });
+      console.log('Wallet name updated successfully');
+    } catch (error) {
+      console.error('Error updating wallet name:', error);
+      throw error;
+    }
+  }
+
   // Onboarding Management
   async setOnboardingCompleted(): Promise<void> {
     try {

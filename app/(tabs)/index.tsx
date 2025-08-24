@@ -45,7 +45,8 @@ export default function HomeScreen() {
     balance: '$0.00',
     isActive: true
   }]);
-  const [selectedNetwork] = useState('Sepolia');
+  const [selectedNetwork, setSelectedNetwork] = useState('Sepolia');
+  const [walletName, setWalletName] = useState('Royal Crab');
   
   // Token icons mapping - using actual images
   const getTokenIcon = (symbol: string) => {
@@ -128,6 +129,18 @@ export default function HomeScreen() {
       const walletData = await StorageService.getWalletData();
       console.log('Raw wallet data from storage:', walletData);
       setWalletData(walletData);
+      
+      // Set wallet name from storage or use default
+      if (walletData?.name) {
+        setWalletName(walletData.name);
+      }
+      
+      // Set network from NetworkConfigService
+      const currentNetwork = NetworkConfigService.getCurrentNetwork();
+      setSelectedNetwork(currentNetwork);
+      
+      // Reinitialize StarkNetWalletService provider to use correct network
+      StarkNetWalletService.reinitializeProvider();
       
       if (walletData) {
         console.log('=== WALLET DEBUG INFO ===');
@@ -383,7 +396,7 @@ export default function HomeScreen() {
           </View>
           <ThemedText style={styles.capsuleText}>
             <ThemedText style={styles.accountNameText}>
-              {accounts.find(acc => acc.isActive)?.name || 'Royal Crab'}
+              {walletName}
             </ThemedText>
             <ThemedText style={styles.networkSeparator}> | </ThemedText>
             <ThemedText style={styles.networkText}>

@@ -34,11 +34,7 @@ export default function NetworkSelector({ onNetworkChange }: NetworkSelectorProp
       // Notify parent component
       onNetworkChange?.(network);
       
-      Alert.alert(
-        'Network Switched',
-        `Successfully switched to ${NetworkConfigService.getCurrentConfig().displayName}`,
-        [{ text: 'OK' }]
-      );
+      // Network switched successfully - no alert needed
     } catch {
       Alert.alert(
         'Network Switch Failed',

@@ -15,6 +15,7 @@ export interface StarkNetWalletData {
   publicKey: string;
   privateKey: string;
   salt: string;
+  name?: string;
 }
 
 export interface TokenBalance {
@@ -55,6 +56,14 @@ class StarkNetWalletService {
     console.log(`Initializing StarkNet provider with RPC: ${rpcUrl}`);
     this.provider = new RpcProvider({ nodeUrl: rpcUrl });
     console.log('StarkNet provider initialized with:', rpcUrl);
+  }
+
+  /**
+   * Reinitialize provider when network changes
+   */
+  public reinitializeProvider() {
+    console.log('Reinitializing provider for network change...');
+    this.initializeProvider();
   }
 
   // Ensure proper address formatting (matches extension implementation)

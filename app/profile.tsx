@@ -6,8 +6,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { SparkColors } from '@/constants/Colors';
 import NetworkSelector from '@/components/NetworkSelector';
 import NetworkConfigService, { NetworkType } from '@/services/NetworkConfigService';
-import AutoSwapperService from '@/services/AutoSwapperService';
-import StarkNetWalletService from '@/services/StarkNetWalletService';
 
 export default function ProfileScreen() {
   const [currentNetwork, setCurrentNetwork] = useState<NetworkType>('mainnet');
@@ -18,12 +16,11 @@ export default function ProfileScreen() {
     setCurrentNetwork(network);
   }, []);
 
-  const handleNetworkChange = (network: NetworkType) => {
+  const handleNetworkChange = async (network: NetworkType) => {
     setCurrentNetwork(network);
     
-    // Refresh services to use new network configuration
-    AutoSwapperService.refreshNetworkConfig();
-    StarkNetWalletService.refreshNetworkConfig();
+    // Switch network using NetworkConfigService (this will handle service updates)
+    await NetworkConfigService.switchNetwork(network);
   };
 
   const profileSections = [

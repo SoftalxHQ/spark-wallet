@@ -151,6 +151,11 @@ class NetworkConfigService {
       this.currentNetwork = network;
       await AsyncStorage.setItem(this.STORAGE_KEY, network);
       console.log(`Switched to ${network} network`);
+      
+      // Notify StarkNetWalletService to reinitialize provider
+      const { default: StarkNetWalletService } = await import('./StarkNetWalletService');
+      StarkNetWalletService.reinitializeProvider();
+      
     } catch (error) {
       console.error('Failed to switch network:', error);
       throw new Error('Failed to switch network');
