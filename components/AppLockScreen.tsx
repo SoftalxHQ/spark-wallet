@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { SparkColors } from '@/constants/Colors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import StorageService from '@/services/StorageService';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 interface AppLockScreenProps {
   onUnlock: () => void;
@@ -13,6 +14,45 @@ interface AppLockScreenProps {
 export default function AppLockScreen({ onUnlock }: AppLockScreenProps) {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+
+  useEffect(() => {
+    const checkBiometricStatus = async () => {
+      try {
+        const enabled = await StorageService.isBiometricEnabled();
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        setBiometricEnabled(enabled && hasHardware && isEnrolled);
+      } catch (error) {
+        console.error('Error checking biometric status:', error);
+      }
+    };
+    
+    checkBiometricStatus();
+  }, []);
+
+  const handleBiometricUnlock = async () => {
+    setIsLoading(true);
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Unlock your wallet',
+        fallbackLabel: 'Use Password',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        await StorageService.setAppLocked(false);
+        onUnlock();
+      } else {
+        Alert.alert('Authentication Failed', 'Biometric authentication was cancelled or failed');
+      }
+    } catch (error) {
+      console.error('Error with biometric unlock:', error);
+      Alert.alert('Error', 'Biometric authentication failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleUnlock = async () => {
     if (!password.trim()) {
@@ -69,6 +109,19 @@ export default function AppLockScreen({ onUnlock }: AppLockScreenProps) {
             editable={!isLoading}
           />
         </View>
+
+        {/* Biometric Button */}
+        {biometricEnabled && (
+          <TouchableOpacity
+            style={[styles.biometricButton, isLoading && styles.disabledButton]}
+            onPress={handleBiometricUnlock}
+            disabled={isLoading}
+          >
+            <ThemedText style={styles.biometricButtonText}>
+              👆 Use Biometric
+            </ThemedText>
+          </TouchableOpacity>
+        )}
 
         {/* Unlock Button */}
         <TouchableOpacity
@@ -152,6 +205,24 @@ const styles = StyleSheet.create({
   },
   unlockButtonText: {
     color: SparkColors.black,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  biometricButton: {
+    backgroundColor: SparkColors.brown,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    width: '100%',
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: SparkColors.gold,
+  },
+  biometricButtonText: {
+    color: SparkColors.white,
     fontSize: 16,
     fontWeight: 'bold',
   },

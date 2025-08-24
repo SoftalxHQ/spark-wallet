@@ -1,20 +1,27 @@
+import React, { useEffect, useState } from 'react';
+import { View, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ScrollView, StyleSheet, TouchableOpacity, View, Modal, Alert, Clipboard } from 'react-native';
-import { useState, useEffect } from 'react';
-
 import { ThemedText } from '@/components/ThemedText';
 import { SparkColors } from '@/constants/Colors';
-import NetworkSelector from '@/components/NetworkSelector';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import NetworkConfigService, { NetworkType } from '@/services/NetworkConfigService';
 import StorageService from '@/services/StorageService';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Clipboard from 'expo-clipboard';
+import AppLockScreen from '@/components/AppLockScreen';
+import NetworkSelector from '@/components/NetworkSelector';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
+import BiometricModal from '@/components/BiometricModal';
 
 export default function ProfileScreen() {
-  const [currentNetwork, setCurrentNetwork] = useState<NetworkType>('mainnet');
+  const [, setCurrentNetwork] = useState<NetworkType>('mainnet');
   const [userEmail, setUserEmail] = useState('user@example.com');
   const [walletAddress, setWalletAddress] = useState('0x1234...5678');
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [activeWallet, setActiveWallet] = useState<any>(null);
+  const [showPrivateKeyLock, setShowPrivateKeyLock] = useState(false);
+  const [showRecoveryPhraseLock, setShowRecoveryPhraseLock] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [showBiometricModal, setShowBiometricModal] = useState(false);
 
   useEffect(() => {
     loadProfileData();
@@ -51,15 +58,23 @@ export default function ProfileScreen() {
     await NetworkConfigService.switchNetwork(network);
   };
 
+
   const handleWalletAddressPress = () => {
     setShowWalletModal(true);
   };
 
   const handleExportPrivateKey = () => {
+    console.log('Export private key button pressed');
+    setShowPrivateKeyLock(true);
+  };
+
+  const handlePrivateKeyUnlock = () => {
+    setShowPrivateKeyLock(false);
+    
     if (activeWallet?.privateKey) {
       Alert.alert(
-        'Export Private Key',
-        'Your private key will be copied to clipboard. Keep it secure!',
+        'Private Key',
+        `${activeWallet.privateKey}`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -71,15 +86,55 @@ export default function ProfileScreen() {
           }
         ]
       );
+    } else {
+      Alert.alert('Error', 'No private key available');
     }
   };
 
   const handleShowRecoveryPhrase = () => {
-    Alert.alert(
-      'Recovery Phrase',
+    setShowRecoveryPhraseLock(true);
+  };
+
+  const handleRecoveryPhraseUnlock = () => {
+    setShowRecoveryPhraseLock(false);
+    
+    if (activeWallet?.mnemonic) {
+      Alert.alert(
+        'Recovery Phrase',
       'Recovery phrase functionality will be implemented in the next phase.',
       [{ text: 'OK' }]
-    );
+      );
+    } else {
+      Alert.alert('Error', 'No recovery phrase available');
+    }
+  };
+
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      const isValid = await StorageService.validateUserPassword(currentPassword);
+      if (isValid) {
+        await StorageService.saveUserPassword(newPassword);
+        Alert.alert('Success', 'Password changed successfully');
+        setShowChangePasswordModal(false);
+      } else {
+        Alert.alert('Error', 'Current password is incorrect');
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      Alert.alert('Error', 'Failed to change password');
+    }
+  };
+
+  const handleEnableBiometric = async () => {
+    try {
+      // In a real app, you would check biometric availability here
+      await StorageService.setBiometricEnabled(true);
+      Alert.alert('Success', 'Biometric login enabled');
+      setShowBiometricModal(false);
+    } catch (error) {
+      console.error('Error enabling biometric:', error);
+      Alert.alert('Error', 'Failed to enable biometric login');
+    }
   };
 
   const profileSections = [
@@ -93,9 +148,8 @@ export default function ProfileScreen() {
     {
       title: 'Security',
       items: [
-        { name: 'Change Password', icon: '🔒', onPress: undefined },
-        { name: 'Two-Factor Authentication', icon: '🔐', onPress: undefined },
-        { name: 'Biometric Login', icon: '👆', onPress: undefined },
+        { name: 'Change Password', icon: '🔒', onPress: () => setShowChangePasswordModal(true), value: undefined },
+        { name: 'Biometric Login', icon: '👆', onPress: () => setShowBiometricModal(true), value: undefined },
       ]
     },
     {
@@ -208,17 +262,14 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-          {/* Test App Lock */}
+          {/* Export Private Key */}
           <TouchableOpacity 
             style={styles.walletActionButton}
-            onPress={async () => {
-              await StorageService.setAppLocked(true);
-              Alert.alert('Test', 'App locked manually - restart app to test unlock');
-            }}
+            onPress={handleExportPrivateKey}
           >
             <View style={styles.walletActionContent}>
               <IconSymbol name="shield.fill" size={20} color={SparkColors.gold} />
-              <ThemedText style={styles.walletActionText}>Test App Lock</ThemedText>
+              <ThemedText style={styles.walletActionText}>Export Private Key</ThemedText>
             </View>
             <IconSymbol name="chevron.right" size={16} color={SparkColors.lightGray} />
           </TouchableOpacity>
@@ -237,6 +288,44 @@ export default function ProfileScreen() {
         </View>
       </LinearGradient>
     </Modal>
+
+    {/* Private Key Lock Screen */}
+    {showPrivateKeyLock && (
+      <Modal
+        visible={showPrivateKeyLock}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowPrivateKeyLock(false)}
+      >
+        <AppLockScreen onUnlock={handlePrivateKeyUnlock} />
+      </Modal>
+    )}
+
+    {/* Recovery Phrase Lock Screen */}
+    {showRecoveryPhraseLock && (
+      <Modal
+        visible={showRecoveryPhraseLock}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowRecoveryPhraseLock(false)}
+      >
+        <AppLockScreen onUnlock={handleRecoveryPhraseUnlock} />
+      </Modal>
+    )}
+
+    {/* Change Password Modal */}
+    <ChangePasswordModal
+      visible={showChangePasswordModal}
+      onClose={() => setShowChangePasswordModal(false)}
+      onChangePassword={handleChangePassword}
+    />
+
+    {/* Biometric Modal */}
+    <BiometricModal
+      visible={showBiometricModal}
+      onClose={() => setShowBiometricModal(false)}
+      onEnableBiometric={handleEnableBiometric}
+    />
   </LinearGradient>
 );
 }

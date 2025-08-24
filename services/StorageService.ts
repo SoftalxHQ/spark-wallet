@@ -370,6 +370,26 @@ class StorageService {
     }
   }
 
+  // Biometric Authentication Management
+  async setBiometricEnabled(enabled: boolean): Promise<void> {
+    try {
+      await AsyncStorage.setItem('spark_biometric_enabled', enabled.toString());
+    } catch (error) {
+      console.error('Error setting biometric status:', error);
+      throw error;
+    }
+  }
+
+  async isBiometricEnabled(): Promise<boolean> {
+    try {
+      const enabled = await AsyncStorage.getItem('spark_biometric_enabled');
+      return enabled === 'true';
+    } catch (error) {
+      console.error('Error checking biometric status:', error);
+      return false;
+    }
+  }
+
   // Clear Data (Logout)
   async clearUserData(): Promise<void> {
     try {

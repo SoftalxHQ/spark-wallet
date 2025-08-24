@@ -782,9 +782,10 @@ export default function RootLayout() {
           
           const finalHasPassword = await StorageService.hasUserPassword();
           if (finalHasPassword) {
-            const locked = await StorageService.isAppLocked();
-            console.log('App locked status on startup:', locked);
-            setIsAppLocked(locked);
+            // Always lock app on launch if user has a password
+            console.log('App has password, locking on launch');
+            await StorageService.setAppLocked(true);
+            setIsAppLocked(true);
           }
         }
       } catch (error) {
