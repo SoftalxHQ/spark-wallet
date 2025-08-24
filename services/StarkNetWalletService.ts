@@ -11,6 +11,7 @@ import StorageService from './StorageService';
 import NetworkConfigService from './NetworkConfigService';
 
 export interface StarkNetWalletData {
+  id?: string;
   address: string;
   publicKey: string;
   privateKey: string;
@@ -108,14 +109,15 @@ class StarkNetWalletService {
       );
       console.log('Raw calculated address:', rawAddress);
       
-      const address = this.ensureAddressFormat(rawAddress);
-      console.log('Formatted wallet address:', address);
+      const formattedAddress = this.ensureAddressFormat(rawAddress);
+      console.log('Formatted wallet address:', formattedAddress);
       
       const walletData: StarkNetWalletData = {
-        address: address,
+        address: formattedAddress,
         publicKey: publicKey,
         privateKey: privateKey,
-        salt: publicKey
+        salt: publicKey,
+        name: undefined // Name will be assigned by StorageService based on account count
       };
       
       console.log('Final wallet data object:', {

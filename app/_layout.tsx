@@ -761,7 +761,7 @@ export default function RootLayout() {
         console.log('Storage info:', storageInfo);
         
         // If user has completed onboarding or has user data, skip onboarding
-        if (storageInfo.hasCompletedOnboarding || storageInfo.hasUser) {
+        if (storageInfo.onboardingCompleted || storageInfo.hasUserData) {
           setShowOnboarding(false);
         }
       } catch (error) {

@@ -38,15 +38,9 @@ export default function HomeScreen() {
   const [transactionHash, setTransactionHash] = useState('');
   const [isSendingTransaction, setIsSendingTransaction] = useState(false);
   const [showTokenDropdown, setShowTokenDropdown] = useState(false);
-  const [accounts, setAccounts] = useState([{
-    id: '1',
-    name: 'Carrot',
-    address: '0x0057...316C',
-    balance: '$0.00',
-    isActive: true
-  }]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [selectedNetwork, setSelectedNetwork] = useState('Sepolia');
-  const [walletName, setWalletName] = useState('Royal Crab');
+  const [walletName, setWalletName] = useState('Wallet');
   
   // Token icons mapping - using actual images
   const getTokenIcon = (symbol: string) => {
@@ -125,14 +119,19 @@ export default function HomeScreen() {
       const storageInfo = await StorageService.getStorageInfo();
       console.log('Storage info:', storageInfo);
       
-      // Load wallet data
-      const walletData = await StorageService.getWalletData();
-      console.log('Raw wallet data from storage:', walletData);
+      
+      // Load active wallet data from multi-wallet structure
+      const walletData = await StorageService.getActiveWallet();
+      console.log('Active wallet data from storage:', walletData);
       setWalletData(walletData);
       
-      // Set wallet name from storage or use default
+      // Set wallet name from active wallet or use default
       if (walletData?.name) {
+        console.log('Setting wallet name from active wallet:', walletData.name);
         setWalletName(walletData.name);
+      } else {
+        console.log('No wallet name found, using default. Wallet data:', walletData);
+        setWalletName('Wallet');
       }
       
       // Set network from NetworkConfigService
@@ -141,6 +140,19 @@ export default function HomeScreen() {
       
       // Reinitialize StarkNetWalletService provider to use correct network
       StarkNetWalletService.reinitializeProvider();
+      
+      // Load all wallets for account modal
+      const allWallets = await StorageService.getAllWallets();
+      console.log('All wallets loaded:', allWallets);
+      const formattedAccounts = allWallets.map((wallet, index) => ({
+        id: wallet.id || wallet.address,
+        name: wallet.name || `Account${index + 1}`,
+        address: `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`,
+        balance: '$0.00', // Will be updated with actual balance
+        isActive: wallet.address === walletData?.address
+      }));
+      console.log('Formatted accounts:', formattedAccounts);
+      setAccounts(formattedAccounts);
       
       if (walletData) {
         console.log('=== WALLET DEBUG INFO ===');
@@ -171,6 +183,26 @@ export default function HomeScreen() {
 
   const handleProfilePress = () => {
     router.push('/profile');
+  };
+
+  const handleAddWallet = async () => {
+    try {
+      setShowAccountModal(false);
+      
+      // Create new wallet
+      const newWallet = await StarkNetWalletService.createSmartWallet();
+      
+      // Add to multi-wallet storage
+      await StorageService.addWallet(newWallet);
+      
+      // Reload wallet data to refresh the UI
+      await loadWalletData();
+      
+      console.log('New wallet created and added successfully');
+    } catch (error) {
+      console.error('Error creating new wallet:', error);
+      // You might want to show an error alert here
+    }
   };
 
   const handleTokenPress = (token: any) => {
@@ -526,12 +558,30 @@ export default function HomeScreen() {
                 <TouchableOpacity 
                   key={account.id} 
                   style={[styles.accountItem, account.isActive && styles.activeAccount]}
-                  onPress={() => {
+                  onPress={async () => {
+                    try {
+                      // Switch to selected wallet
+                      await StorageService.switchActiveWallet(account.id);
+                      
+                      // Get the switched wallet data to update wallet name
+                      const switchedWallet = await StorageService.getActiveWallet();
+                      if (switchedWallet) {
+                        setWalletName(switchedWallet.name || 'Wallet');
+                      }
+                      
+                      // Update UI state
                     setAccounts(prev => prev.map(acc => ({
                       ...acc,
                       isActive: acc.id === account.id
                     })));
+                      
                     setShowAccountModal(false);
+                      
+                      // Reload wallet data to refresh balances and UI
+                      await loadWalletData();
+                    } catch (error) {
+                      console.error('Error switching wallet:', error);
+                    }
                   }}
                 >
                   <View style={styles.modalAccountInfo}>
@@ -551,7 +601,10 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
             
-            <TouchableOpacity style={styles.addAccountButton}>
+            <TouchableOpacity 
+              style={styles.addAccountButton}
+              onPress={handleAddWallet}
+            >
               <View style={styles.addAccountIcon}>
                 <ThemedText style={styles.addAccountIconText}>+</ThemedText>
               </View>
@@ -710,34 +763,41 @@ export default function HomeScreen() {
                   {/* Token Dropdown */}
                   {showTokenDropdown && (
                     <View style={styles.tokenDropdown}>
-                      {tokensToDisplay.map((token, index) => (
-                        <TouchableOpacity 
-                          key={index}
-                          style={[
-                            styles.tokenDropdownItem,
-                            sendSelectedToken.symbol === token.symbol && styles.selectedTokenItem
-                          ]}
-                          onPress={() => {
-                            setSendSelectedToken(token);
-                            setShowTokenDropdown(false);
-                            setSendAmount(''); // Clear amount when token changes
-                          }}
-                        >
-                          <View style={styles.tokenDropdownContent}>
-                            <View style={styles.tokenDropdownIcon}>
-                              <Image 
-                                source={getTokenIcon(token.symbol)} 
-                                style={styles.tokenDropdownIconImage}
-                                resizeMode="contain"
-                              />
+                      <ScrollView 
+                        style={styles.tokenDropdownScroll}
+                        showsVerticalScrollIndicator={false}
+                        nestedScrollEnabled={true}
+                      >
+                        {tokensToDisplay.map((token, index) => (
+                          <TouchableOpacity 
+                            key={index}
+                            style={[
+                              styles.tokenDropdownItem,
+                              sendSelectedToken.symbol === token.symbol && styles.selectedTokenItem,
+                              index === tokensToDisplay.length - 1 && styles.lastTokenItem
+                            ]}
+                            onPress={() => {
+                              setSendSelectedToken(token);
+                              setShowTokenDropdown(false);
+                              setSendAmount(''); // Clear amount when token changes
+                            }}
+                          >
+                            <View style={styles.tokenDropdownContent}>
+                              <View style={styles.tokenDropdownIcon}>
+                                <Image 
+                                  source={getTokenIcon(token.symbol)} 
+                                  style={styles.tokenDropdownIconImage}
+                                  resizeMode="contain"
+                                />
+                              </View>
+                              <View style={styles.tokenDropdownInfo}>
+                                <ThemedText style={styles.tokenDropdownSymbol}>{token.symbol}</ThemedText>
+                                <ThemedText style={styles.tokenDropdownBalance}>{parseFloat(token.balanceFormatted).toFixed(4)}</ThemedText>
+                              </View>
                             </View>
-                            <View style={styles.tokenDropdownInfo}>
-                              <ThemedText style={styles.tokenDropdownSymbol}>{token.symbol}</ThemedText>
-                              <ThemedText style={styles.tokenDropdownBalance}>{parseFloat(token.balanceFormatted).toFixed(4)}</ThemedText>
-                            </View>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
                     </View>
                   )}
                 </View>
@@ -1645,15 +1705,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: SparkColors.brown,
     zIndex: 1000,
-    maxHeight: 150,
+    maxHeight: 300,
+    shadowColor: SparkColors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   tokenDropdownItem: {
-    padding: 12,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: SparkColors.brown,
+    backgroundColor: SparkColors.darkBrown,
   },
   selectedTokenItem: {
     backgroundColor: SparkColors.brown,
+  },
+  lastTokenItem: {
+    borderBottomWidth: 0,
+  },
+  tokenDropdownScroll: {
+    maxHeight: 300,
   },
   tokenDropdownContent: {
     flexDirection: 'row',
